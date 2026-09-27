@@ -1,0 +1,43 @@
+name: x2fb
+
+on:
+  schedule:
+    - cron: "17 * * * *"   # كل ساعة
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# دورة واحدة في كل لحظة: طابع الادّعاء في السجل يفترض ألا تتسابق دورتان
+concurrency:
+  group: x2fb
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run cycle
+        env:
+          TWITTERAPI_IO_KEY: ${{ secrets.TWITTERAPI_IO_KEY }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TRANSFORMER: ${{ vars.TRANSFORMER }}
+          MODE: ${{ vars.MODE }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+        run: python -m x2fb run
+      - name: Save ledger
+        if: always()
+        run: |
+          git config user.name "x2fb-bot"
+          git config user.email "x2fb-bot@users.noreply.github.com"
+          git add state/ledger.json
+          git diff --cached --quiet || (git commit -m "state: cycle $(date -u +%FT%TZ)" && git push)
