@@ -37,6 +37,16 @@ def latest_originals(pages: int = 1) -> list[dict]:
     return out
 
 
+def by_ids(ids: list[str]) -> dict[str, dict]:
+    """جلب منشورات بعينها بمعرّفاتها — لتحديث أرقام ما خرج من نافذة آخر ٢٠ منشوراً."""
+    out = {}
+    for i in range(0, len(ids), 50):
+        d = _get("tweets", {"tweet_ids": ",".join(ids[i:i + 50])})
+        for t in d.get("tweets", []):
+            out[t["id"]] = t
+    return out
+
+
 def thread_chain(tweet: dict) -> list[dict]:
     """الثريد: المنشور الأول ثم ردود يونس المتسلسلة على نفسه.
 
@@ -45,11 +55,9 @@ def thread_chain(tweet: dict) -> list[dict]:
     """
     found, cursor = [], ""
     for _ in range(3):
-        try:
-            d = _get("tweet/advanced_search", {"query": f"conversation_id:{tweet['id']} from:{config.X_USERNAME}",
-                                               "queryType": "Latest", "cursor": cursor})
-        except Exception:
-            break
+        # الخطأ يُرفع عمداً: رأس ثريد بلا بقيته يُنقل كأنه منشور كامل — أسوأ من إعادة المحاولة
+        d = _get("tweet/advanced_search", {"query": f"conversation_id:{tweet['id']} from:{config.X_USERNAME}",
+                                           "queryType": "Latest", "cursor": cursor})
         found += d.get("tweets", [])
         cursor = d.get("next_cursor") or ""
         if not d.get("has_next_page") or not cursor:

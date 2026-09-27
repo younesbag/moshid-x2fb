@@ -71,27 +71,41 @@ def cycle() -> None:
     baseline = state.setdefault("baseline", {})
     now = ledger.now()
 
-    # ١) قرارات تلغرام
+    # ١) قرارات تلغرام بترتيب الضغط. «إلغاء» يسري حتى بعد «نشر» ما دام لم يُنشر
     decisions, state["tg_offset"] = tg.poll(state.get("tg_offset", 0))
     for kind, xid in decisions:
         it = items.get(xid)
-        if it and it["status"] in ("pending", "drafted"):
-            ledger.set_status(it, "approved" if kind == "ok" else "vetoed")
+        if not it:
+            continue
+        if kind == "ok" and it["status"] in ("pending", "drafted"):
+            ledger.set_status(it, "approved")
+        elif kind == "no" and it["status"] in ("pending", "drafted", "approved"):
+            ledger.set_status(it, "vetoed")
     ledger.save(state)
 
-    # ٢) جلب آخر المنشورات وتحديث أرقامها (أول تشغيل: صفحتان لبناء خط الأساس)
-    tweets = {t["id"]: t for t in xsrc.latest_originals(pages=1 if baseline else 3)}
-    for tid, t in tweets.items():
-        fresh = _item_from(t)
-        if tid in items:
-            items[tid]["score"] = fresh["score"]
-        else:
-            items[tid] = fresh
-            ledger.set_status(items[tid], "seen")
-
-    # ٣) الحكم على ما بلغ عمر الحكم — خط الأساس يُحدَّث أولاً ثم تُحسب العتبة مرة واحدة
     def age_h(it):
         return (now - ledger.datetime.fromisoformat(it["created"])).total_seconds() / 3600
+
+    # ٢) جلب آخر المنشورات، ثم تحديث أرقام كل ما زال في نافذة الحكم أو النقل بمعرّفاته
+    #    (الناشر النشط تخرج منشوراته من آخر ٢٠ قبل ٢٤ ساعة — بلا هذا يتجمد رقمها مبكراً)
+    tweets = {t["id"]: t for t in xsrc.latest_originals(pages=1 if baseline else 3)}
+    for tid, t in tweets.items():
+        if tid not in items:
+            items[tid] = _item_from(t)
+            ledger.set_status(items[tid], "seen")
+    live = ("seen", "candidate", "pending", "approved")
+    missing = [k for k, it in items.items() if it["status"] in live and k not in tweets
+               and age_h(it) <= config.MAX_AGE_HOURS + 48]
+    if missing:
+        try:
+            tweets.update(xsrc.by_ids(missing))
+        except Exception as e:
+            print(f"تعذّر تحديث المنشورات بالمعرّف: {str(e)[:200]}")
+    for tid, t in tweets.items():
+        if tid in items:
+            items[tid]["score"] = xsrc.score(t)
+
+    # ٣) الحكم على ما بلغ عمر الحكم — خط الأساس يُحدَّث أولاً ثم تُحسب العتبة مرة واحدة
     for it in items.values():
         if age_h(it) >= config.MIN_AGE_HOURS:
             baseline[it["id"]] = it["score"]
@@ -120,7 +134,9 @@ def cycle() -> None:
         it = cands[0]
         tw = tweets.get(it["id"])
         if tw is None:
-            ledger.set_status(it, "expired", reason="خرج من نافذة الجلب")
+            it.setdefault("errors", []).append("تعذّر جلب المنشور بمعرّفه")
+            if len(it["errors"]) >= 3:
+                ledger.set_status(it, "failed", reason="تعذّر جلبه ٣ مرات (ربما حُذف)")
         else:
             try:
                 draft(it, tw)
@@ -129,22 +145,30 @@ def cycle() -> None:
                 if len(it["errors"]) >= 3:
                     ledger.set_status(it, "failed", reason="فشل التحويل ٣ مرات")
             if it["status"] == "drafted":
-                if config.MODE == "auto":
-                    ledger.set_status(it, "approved")
-                else:
-                    ledger.set_status(it, "pending")
-            elif it["status"] in ("blocked", "manual") and tg.enabled():
-                tg.send(f"⚪ لم يُنقل تلقائياً ({it.get('reason')}):\n{it['x_url']}")
+                ledger.set_status(it, "approved" if config.MODE == "auto" else "pending")
         ledger.save(state)
+        if it["status"] in ("blocked", "manual"):
+            tg.notify(f"⚪ لم يُنقل تلقائياً ({it.get('reason')}):\n{it['x_url']}")
 
     # المعاينات: تُرسل لكل منشور معلّق لم يُعاين بعد (ولو صيغ قبل ربط تلغرام).
     # المهلة تبدأ من لحظة المعاينة لا من لحظة الصياغة — لا يُنشر شيء لم تره.
     if tg.enabled():
         for it in [i for i in items.values() if i["status"] == "pending" and not i.get("previewed")][:3]:
-            tg.preview(it)
+            try:
+                tg.preview(it)
+            except Exception as e:
+                print(f"تعذّرت المعاينة: {str(e)[:200]}")
+                break
             it["previewed"] = now.isoformat()
             it["deadline"] = (now + timedelta(hours=config.VETO_HOURS)).isoformat()
-        ledger.save(state)
+            ledger.save(state)
+
+    # منشور عالق في «publishing» يعني دورة انقطعت أثناء النشر: لا يُعاد آلياً أبداً، بل يُنبَّه عنه
+    for it in items.values():
+        if it["status"] == "publishing" and not it.get("stuck_alerted"):
+            tg.notify(f"🟠 منشور عالق أثناء النشر — تحقّق يدوياً من الصفحة:\n{it['x_url']}")
+            it["stuck_alerted"] = now.isoformat()
+    ledger.save(state)
 
     # ٥) النشر: منشور واحد يومياً داخل نافذة النشر
     day = now.astimezone(RIYADH).date().isoformat()
@@ -163,17 +187,39 @@ def cycle() -> None:
     if not config.FB_PAGE_TOKEN:
         print("FB_PAGE_TOKEN غير مضبوط — تخطّي النشر")
         return
+    # الصفحة نفسها مصدر الحقيقة: لو ضاع حفظ السجل في دورة سابقة (فشل push مثلاً)
+    # يبقى المنشور على الصفحة شاهداً — لا نشر مكرر، ولا أكثر من منشور في اليوم ولو نشرتَ يدوياً
+    try:
+        posts = fb.recent_posts()
+    except Exception as e:
+        print(f"تعذّر قراءة الصفحة قبل النشر — لا نشر هذه الدورة: {str(e)[:200]}")
+        return
+    if fb.already_posted(it["fb_text"], posts):
+        ledger.set_status(it, "published", reason="وُجد على الصفحة مسبقاً")
+        ledger.save(state)
+        return
+    today = sum(1 for p in posts
+                if ledger.datetime.fromisoformat(p["created_time"].replace("+0000", "+00:00")).astimezone(RIYADH).date().isoformat() == day)
+    if today >= config.MAX_PER_DAY:
+        state["published_days"][day] = today
+        ledger.save(state)
+        return
+
     ledger.set_status(it, "publishing")
+    state["published_days"][day] = state["published_days"].get(day, 0) + 1  # يُحتسب اليوم مع المحاولة لا مع النجاح
     ledger.save(state)  # الادّعاء محفوظ قبل الطلب
     try:
         fb_id = fb.publish(it["fb_text"], it["photos"] if it.get("use_media") else None)
-        ledger.set_status(it, "published", fb_id=fb_id)
-        state["published_days"][day] = state["published_days"].get(day, 0) + 1
-        tg.send(f"✅ نُشر على الصفحة: https://facebook.com/{fb_id}")
     except Exception as e:
-        ledger.set_status(it, "failed", reason=str(e)[:500])
-        tg.send(f"🔴 فشل النشر: {str(e)[:300]}\n{it['x_url']}")
+        # مهلة انتهت بعد POST ناجح ممكنة: الحالة «uncertain» لا تُعاد آلياً، وحارس الصفحة يحسمها لاحقاً
+        timeout = "timed out" in str(e).lower() or isinstance(e, TimeoutError)
+        ledger.set_status(it, "uncertain" if timeout else "failed", reason=str(e)[:500])
+        ledger.save(state)
+        tg.notify(f"🔴 {'نتيجة النشر غير مؤكدة' if timeout else 'فشل النشر'}: {str(e)[:300]}\n{it['x_url']}")
+        return
+    ledger.set_status(it, "published", fb_id=fb_id)
     ledger.save(state)
+    tg.notify(f"✅ نُشر على الصفحة: https://facebook.com/{fb_id}")
 
 
 def dry(n: int, min_age: float) -> None:

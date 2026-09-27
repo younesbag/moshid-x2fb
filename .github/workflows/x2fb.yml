@@ -18,7 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # رأس الفرع لحظة التنفيذ، لا الـSHA المثبّت لحظة الإطلاق — وإلا قرأت الدورة المنتظرة سجلاً قديماً
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -33,11 +36,22 @@ jobs:
           TRANSFORMER: ${{ vars.TRANSFORMER }}
           MODE: ${{ vars.MODE }}
           FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          VETO_HOURS: ${{ vars.VETO_HOURS }}
+          PUBLISH_HOURS: ${{ vars.PUBLISH_HOURS }}
+          X_USERNAME: ${{ vars.X_USERNAME }}
         run: python -m x2fb run
       - name: Save ledger
         if: always()
         run: |
           git config user.name "x2fb-bot"
           git config user.email "x2fb-bot@users.noreply.github.com"
+          [ -f state/ledger.json ] || exit 0
           git add state/ledger.json
-          git diff --cached --quiet || (git commit -m "state: cycle $(date -u +%FT%TZ)" && git push)
+          git diff --cached --quiet && exit 0
+          git commit -m "state: cycle $(date -u +%FT%TZ)"
+          for i in 1 2 3 4 5; do
+            git pull --rebase -X theirs origin "${{ github.ref_name }}" && git push && exit 0
+            sleep $((i * 5))
+          done
+          echo "::error::تعذّر حفظ السجل — حارس الصفحة يمنع النشر المكرر في الدورة التالية"
+          exit 1

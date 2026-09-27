@@ -51,5 +51,29 @@ class Thread(unittest.TestCase):
         self.assertEqual([t["id"] for t in chain], ["1", "2", "3"])
 
 
+class PageGuard(unittest.TestCase):
+    def test_already_posted_ignores_whitespace(self):
+        from x2fb import fb
+        posts = [{"message": "سطر أول\n\nسطر   ثانٍ\n\n— يونس"}]
+        self.assertTrue(fb.already_posted("سطر أول\nسطر ثانٍ — يونس", posts))
+        self.assertFalse(fb.already_posted("نص آخر تماماً", posts))
+
+
+class Telegram(unittest.TestCase):
+    def _update(self, uid, chat, sender, data):
+        return {"update_id": uid, "callback_query": {"id": str(uid), "data": data,
+                "from": {"id": sender}, "message": {"chat": {"id": chat}}}}
+
+    def test_only_owner_and_order_kept(self):
+        from x2fb import config, tg
+        res = {"result": [self._update(1, 42, 42, "ok:7"), self._update(2, 42, 99, "ok:8"),
+                          self._update(3, 13, 13, "ok:9"), self._update(4, 42, 42, "no:7")]}
+        with mock.patch.object(config, "TG_BOT_TOKEN", "t"), mock.patch.object(config, "TG_CHAT_ID", "42"), \
+             mock.patch.object(tg, "request", return_value=res), mock.patch.object(tg, "_api"):
+            decisions, offset = tg.poll(0)
+        self.assertEqual(decisions, [("ok", "7"), ("no", "7")])
+        self.assertEqual(offset, 5)
+
+
 if __name__ == "__main__":
     unittest.main()

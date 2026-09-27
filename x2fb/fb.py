@@ -32,6 +32,22 @@ def publish(message: str, photo_urls: list[str] | None = None) -> str:
     return r["id"]
 
 
+def recent_posts(limit: int = 15) -> list[dict]:
+    """آخر منشورات الصفحة — مصدر الحقيقة عن «ما نُشر» لا السجل وحده."""
+    r = request("GET", _url(f"{config.FB_PAGE_ID}/posts"),
+                params={"fields": "message,created_time", "limit": limit, "access_token": config.FB_PAGE_TOKEN})
+    return r.get("data", [])
+
+
+def _norm(s: str) -> str:
+    return " ".join((s or "").split())[:300]
+
+
+def already_posted(message: str, posts: list[dict]) -> bool:
+    key = _norm(message)
+    return any(_norm(p.get("message", "")) == key for p in posts)
+
+
 def whoami() -> dict:
     """فحص التوكن: يعيد اسم الصفحة ومعرّفها إن كان التوكن توكن صفحة صالحاً."""
     return request("GET", _url("me"), params={"fields": "id,name", "access_token": config.FB_PAGE_TOKEN})
