@@ -54,8 +54,7 @@ VETO_HOURS = float(env("VETO_HOURS", "3"))
 MIN_AGE_HOURS = float(env("MIN_AGE_HOURS", "24"))   # نحكم على الأداء بعد يوم
 MAX_AGE_HOURS = float(env("MAX_AGE_HOURS", "120"))  # لا ننقل ما فات عليه أكثر من ٥ أيام
 TOP_SHARE = float(env("TOP_SHARE", "0.35"))         # أعلى ٣٥٪ من منشوراتك أداءً
-MAX_PER_DAY = int(env("MAX_PER_DAY", "1"))
-PUBLISH_HOURS = env("PUBLISH_HOURS", "17-22")      # بتوقيت الرياض
+MAX_PER_DAY = int(env("MAX_PER_DAY", "8"))  # صمام أمان فقط — العدد الفعلي يتبع ما توافق عليه
 SIGNATURE = env("SIGNATURE", "— يونس")
 
 STATE_FILE = ROOT / "state" / "ledger.json"

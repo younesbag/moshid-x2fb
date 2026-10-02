@@ -1,8 +1,9 @@
-"""المراجعة عبر تلغرام: معاينة بزرّين، وقراءة الضغطات بالسحب (getUpdates) — لا خادم ولا webhook."""
+"""المراجعة والجدولة عبر تلغرام: معاينة بأزرار أوقات، وقراءة الضغطات والردود بالسحب (getUpdates)."""
 import json
 
 from . import config
 from .http import request
+from .schedule import SLOTS
 
 CHUNK = 3800  # حد رسالة تلغرام ٤٠٩٦
 
@@ -15,16 +16,22 @@ def _api(method: str, **data):
     return request("POST", f"https://api.telegram.org/bot{config.TG_BOT_TOKEN}/{method}", data=data, retries=1)
 
 
-def send(text: str, buttons: list[tuple[str, str]] | None = None) -> None:
-    """يرسل النص كاملاً مقسماً على رسائل؛ الأزرار على آخر رسالة فقط."""
+def send(text: str, keyboard: list[list[tuple[str, str]]] | None = None) -> list[int]:
+    """يرسل النص كاملاً مقسماً على رسائل؛ لوحة الأزرار على آخر رسالة. يعيد معرّفات كل الرسائل
+    (الرد على أي جزء من معاينة طويلة يجب أن يُنسب لمنشورها)."""
     if not enabled():
-        return
+        return []
     chunks = [text[i:i + CHUNK] for i in range(0, len(text), CHUNK)] or [""]
+    ids = []
     for n, chunk in enumerate(chunks):
         data = {"chat_id": config.TG_CHAT_ID, "text": chunk, "disable_web_page_preview": "true"}
-        if buttons and n == len(chunks) - 1:
-            data["reply_markup"] = json.dumps({"inline_keyboard": [[{"text": t, "callback_data": c} for t, c in buttons]]})
-        _api("sendMessage", **data)
+        if keyboard and n == len(chunks) - 1:
+            data["reply_markup"] = json.dumps(
+                {"inline_keyboard": [[{"text": t, "callback_data": c} for t, c in row] for row in keyboard]})
+        mid = (_api("sendMessage", **data).get("result") or {}).get("message_id")
+        if mid:
+            ids.append(mid)
+    return ids
 
 
 def notify(text: str) -> None:
@@ -35,41 +42,59 @@ def notify(text: str) -> None:
         print(f"تعذّر إشعار تلغرام: {str(e)[:200]}")
 
 
-def preview(item: dict) -> None:
+def keyboard(xid: str) -> list[list[tuple[str, str]]]:
+    slots = [(s, f"at:{xid}:{s.replace(':', '')}") for s in SLOTS]
+    return [[("✅ انشر الآن", f"now:{xid}")], slots[:4], slots[4:], [("❌ إلغاء", f"no:{xid}")]]
+
+
+def preview(item: dict) -> list[int]:
+    attach = ("🎬 فيديو المنشور الأصلي" if item.get("video_url")
+              else (f"{len(item.get('photos', []))} صورة" if item.get("use_media") else "لا شيء"))
     head = (f"🟡 منشور مقترح لصفحة فيسبوك\n"
             f"من: {item['x_url']}\n"
             f"أداؤه على X: {item['score']:.0f} نقطة (ضمن الأعلى {item.get('percentile', 0):.0f}٪ من منشوراتك)\n"
-            f"المرفق: {'🎬 فيديو المنشور الأصلي' if item.get('video_url') else (str(len(item.get('photos', []))) + ' صورة' if item.get('use_media') else 'لا شيء')}\n"
+            f"المرفق: {attach}\n"
             f"────────\n")
-    rule = ("\n────────\n«نشر» يضيفه إلى طابور الجدولة (منشور واحد يومياً بترتيب موافقتك). "
-            "يمكنك الإلغاء ما دام لم يُنشر." if config.MODE == "approval"
-            else f"\n────────\nسيُنشر تلقائياً بعد {config.VETO_HOURS:g} ساعات في نافذة النشر ما لم تضغط «إلغاء».")
-    send(head + item["fb_text"] + rule, [("✅ نشر", f"ok:{item['id']}"), ("❌ إلغاء", f"no:{item['id']}")])
+    rule = ("\n────────\nاختر وقت النشر بتوقيت مكة من الأزرار، أو رُدّ على هذه الرسالة بوقت تكتبه "
+            "(مثل 19:45 أو «8:30 م» أو «غدا 08:00»). لن يُنشر بلا اختيارك، ويمكنك تغيير الوقت أو الإلغاء ما دام لم يُنشر."
+            if config.MODE == "approval"
+            else f"\n────────\nسيُنشر تلقائياً بعد {config.VETO_HOURS:g} ساعات ما لم تضغط «إلغاء» أو تختر وقتاً.")
+    return send(head + item["fb_text"] + rule, keyboard(item["id"]))
 
 
-def poll(offset: int) -> tuple[list[tuple[str, str]], int]:
-    """يعيد [(قرار، معرّف)] بترتيب الضغط، من صاحب المحادثة وحده، والإزاحة الجديدة."""
+def poll(offset: int) -> tuple[list[dict], int]:
+    """أحداث صاحب المحادثة وحده بترتيب وقوعها، والإزاحة الجديدة.
+
+    {"kind": "now"|"at"|"no", "id": ..., "arg": "HHMM"}  ضغطة زر
+    {"kind": "text", "text": ..., "reply_to": message_id|None}  رسالة مكتوبة
+    """
     if not enabled():
         return [], offset
     r = request("GET", f"https://api.telegram.org/bot{config.TG_BOT_TOKEN}/getUpdates",
-                params={"offset": offset, "timeout": 0, "allowed_updates": '["callback_query"]'})
-    decisions = []
+                params={"offset": offset, "timeout": 0, "allowed_updates": '["callback_query","message"]'})
+    owner = str(config.TG_CHAT_ID)
+    events = []
     for u in r.get("result", []):
         offset = max(offset, u["update_id"] + 1)
-        cq = u.get("callback_query")
-        if not cq:
-            continue
-        chat = str(cq.get("message", {}).get("chat", {}).get("id"))
-        sender = str(cq.get("from", {}).get("id"))
-        # محادثة خاصة: معرّف المحادثة = معرّف المرسل. أي ضغطة من غيرك تُهمل
-        if chat != str(config.TG_CHAT_ID) or sender != str(config.TG_CHAT_ID):
-            continue
-        kind, _, xid = (cq.get("data") or "").partition(":")
-        if kind in ("ok", "no") and xid:
-            decisions.append((kind, xid))
-            try:
-                _api("answerCallbackQuery", callback_query_id=cq["id"],
-                     text="سُجّل: نشر" if kind == "ok" else "سُجّل: إلغاء")
-            except Exception:
-                pass
-    return decisions, offset
+        cq, msg = u.get("callback_query"), u.get("message")
+        if cq:
+            chat = str(cq.get("message", {}).get("chat", {}).get("id"))
+            # محادثة خاصة: معرّف المحادثة = معرّف المرسل. أي ضغطة من غيرك تُهمل
+            if chat != owner or str(cq.get("from", {}).get("id")) != owner:
+                continue
+            kind, _, rest = (cq.get("data") or "").partition(":")
+            xid, _, arg = rest.partition(":")
+            if kind == "ok":  # أزرار المعاينات القديمة قبل الجدولة
+                kind = "now"
+            if kind in ("now", "at", "no") and xid:
+                events.append({"kind": kind, "id": xid, "arg": arg})
+                try:
+                    _api("answerCallbackQuery", callback_query_id=cq["id"], text="وصل ✓ يصلك التأكيد مع الجدول في الدورة القادمة")
+                except Exception:
+                    pass
+        elif msg:
+            if str(msg.get("chat", {}).get("id")) != owner or str(msg.get("from", {}).get("id")) != owner:
+                continue
+            events.append({"kind": "text", "text": msg.get("text") or "", "date": msg.get("date"),
+                           "reply_to": (msg.get("reply_to_message") or {}).get("message_id")})
+    return events, offset

@@ -8,10 +8,9 @@ import argparse
 import sys
 from datetime import timedelta, timezone
 
-from . import config, fb, gate, ledger, tg, xsrc
+from . import config, fb, gate, ledger, schedule, tg, xsrc
 from .transform import transform
 
-RIYADH = timezone(timedelta(hours=3))
 
 
 def _item_from(t: dict) -> dict:
@@ -64,72 +63,147 @@ def draft(item: dict, tweet: dict) -> None:
 
 
 def _queue(items: list[dict]) -> list[dict]:
-    return sorted(items, key=lambda i: i.get("approved_at") or i.get("deadline") or i["created"])
-
-
-def _slots(state: dict, now, n: int) -> list:
-    """أيام النشر المتوقعة لأول n بنداً في الطابور: خانة MAX_PER_DAY يومياً تبدأ من أول يوم فيه متسع."""
-    start, end = (int(x) for x in config.PUBLISH_HOURS.split("-"))
-    local = now.astimezone(RIYADH)
-    day = local.date()
-    used = state["published_days"].get(day.isoformat(), 0)
-    if local.hour >= end:  # فاتت نافذة اليوم
-        day, used = day + timedelta(days=1), 0
-    out = []
-    while len(out) < n:
-        free = max(0, config.MAX_PER_DAY - used)
-        out += [day] * min(free, n - len(out))
-        day, used = day + timedelta(days=1), 0
-    return out
-
-
-DAYS = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
+    """ترتيب النشر: الأبكر موعداً أولاً؛ «الآن» (بلا موعد) يسبق الجميع بترتيب الموافقة."""
+    return sorted(items, key=lambda i: (i.get("publish_at") or "", i.get("approved_at") or i["created"]))
 
 
 def _queue_text(state: dict, now) -> str:
-    q = _queue([i for i in state["items"].values() if i["status"] == "approved"])
+    q = _queue([i for i in state["items"].values() if i["status"] in ("approved", "scheduled")])
     if not q:
-        return "🗓 طابور النشر فارغ."
-    start = config.PUBLISH_HOURS.split("-")[0]
-    lines = [f"🗓 جدول النشر ({len(q)}) — منشور {config.MAX_PER_DAY} يومياً حوالي {start}:17 بتوقيت الرياض:"]
-    for it, d in zip(q, _slots(state, now, len(q))):
-        first = it["fb_text"].strip().splitlines()[0][:60]
+        return "🗓 لا منشورات مجدولة الآن."
+    lines = [f"🗓 المجدول للنشر ({len(q)}) — بتوقيت مكة:"]
+    for it in q:
+        first = it["fb_text"].strip().splitlines()[0][:55]
         kind = "🎬 " if it.get("video_url") else ("🖼 " if it.get("use_media") else "")
-        lines.append(f"• {DAYS[d.weekday()]} {d.day}/{d.month}: {kind}{first}")
-    lines.append("للإلغاء: اضغط «❌ إلغاء» تحت معاينة المنشور.")
+        at = it.get("publish_at")
+        when = schedule.label(ledger.datetime.fromisoformat(at), now) if at else "الآن"
+        mark = " ✓" if it["status"] == "scheduled" else " (ينتظر التسجيل)"
+        lines.append(f"• {when}{mark} — {kind}{first}")
+    lines.append("✓ = مسجّل عند فيسبوك وسيُنشر في دقيقته.")
+    lines.append("لتغيير وقت منشور: اضغط وقتاً آخر تحت معاينته، أو رُدّ عليها بوقت. وللإلغاء «❌ إلغاء».")
     return chr(10).join(lines)
 
 
-def _in_window(dt) -> bool:
-    a, b = (int(x) for x in config.PUBLISH_HOURS.split("-"))
-    return a <= dt.astimezone(RIYADH).hour < b
+STATUS_AR = {"published": "نُشر فعلاً", "vetoed": "ملغى", "expired": "انتهت مهلته", "failed": "فشل نشره",
+             "uncertain": "نتيجة نشره غير مؤكدة", "publishing": "قيد النشر", "skipped": "متخطّى", "blocked": "موقوف"}
+
+
+def _apply_events(state: dict, events: list[dict], now) -> bool:
+    """يطبّق ضغطات وردود تلغرام على السجل. يعيد True إن وجب إرسال الجدول.
+
+    المواعيد تُحسب من لحظة اختيارك لا من لحظة الدورة (الدورات قد تتأخر ساعات):
+    الرد المكتوب يحمل وقته، والضغطة تُنسب لآخر دورة سابقة. موعد فات بسبب تأخرنا يُنشر الآن لا غداً.
+    """
+    items = state["items"]
+    parse = ledger.datetime.fromisoformat
+    by_msg = {m: i for i in items.values() for m in (i.get("preview_msgs") or [])}
+    press_ref = parse(state["last_poll"]) if state.get("last_poll") else now
+    changed = False
+    for ev in events:
+        if ev["kind"] == "text":
+            it = by_msg.get(ev.get("reply_to"))
+            if it is None:
+                changed = True  # رسالة حرة: يُرسل الجدول الحالي جواباً
+                continue
+            ref = ledger.datetime.fromtimestamp(ev["date"], timezone.utc) if ev.get("date") else press_ref
+            at = schedule.parse(ev["text"], ref)
+            if at is None:
+                tg.notify("لم أفهم الوقت. اكتب مثل: 19:45 أو «8:30 م» أو «غدا 08:00» (بتوقيت مكة).")
+                continue
+        else:
+            it = items.get(ev["id"])
+            at = None
+            if ev["kind"] == "at" and len(ev.get("arg", "")) == 4 and ev["arg"].isdigit():
+                at = schedule.resolve(int(ev["arg"][:2]), int(ev["arg"][2:]), press_ref)
+        if not it:
+            continue
+        first = it.get("fb_text", "").strip().splitlines()[0][:40] if it.get("fb_text") else it["x_url"]
+        if it["status"] == "scheduled" and it.get("publish_at") and now >= parse(it["publish_at"]):
+            # فات موعده: فيسبوك نشره (أو يكاد). السحب الآن يحذف منشوراً حياً — لا نلمسه
+            tg.notify(f"هذا المنشور حان موعده ونُشر، فلا يمكن تغييره من هنا:\n{first}")
+            continue
+        if it["status"] not in ("pending", "drafted", "approved", "scheduled"):
+            tg.notify(f"لا تغيير: هذا المنشور {STATUS_AR.get(it['status'], it['status'])}.\n{first}")
+            continue
+        # منشور مسجّل عند فيسبوك: أي تغيير (إلغاء أو موعد جديد) يبدأ بسحبه من هناك.
+        # إن فشل السحب لا نغيّر شيئاً — وإلا نُشر في موعده القديم وأنت تظنه ملغى
+        if it["status"] == "scheduled":
+            try:
+                fb.delete(it["fb_id"])
+            except Exception as e:
+                tg.notify(f"🔴 تعذّر سحب المنشور المجدول من فيسبوك، فبقي على موعده: {str(e)[:200]}\n{first}")
+                continue
+            it["fb_id"] = ""
+        if ev["kind"] == "no":
+            ledger.set_status(it, "vetoed")
+        else:  # now | at | text: موافقة، أو تغيير موعد منشور موافَق عليه
+            ledger.set_status(it, "approved", approved_at=it.get("approved_at") or now.isoformat())
+            it["publish_at"] = at.isoformat() if at else ""
+            if at and at <= now:
+                tg.notify(f"⏱ الموعد الذي اخترته ({schedule.label(at, now)}) فات قبل أن تصل دورتنا — يُنشر الآن:\n{first}")
+        changed = True
+    return changed
 
 
 def cycle() -> None:
     state = ledger.load()
     items = state["items"]
-    baseline = state.setdefault("baseline", {})
+    state.setdefault("baseline", {})
     now = ledger.now()
 
-    # ١) قرارات تلغرام بترتيب الضغط. «إلغاء» يسري حتى بعد «نشر» ما دام لم يُنشر
-    decisions, state["tg_offset"] = tg.poll(state.get("tg_offset", 0))
-    for kind, xid in decisions:
-        it = items.get(xid)
-        if not it:
-            continue
-        if kind == "ok" and it["status"] in ("pending", "drafted"):
-            ledger.set_status(it, "approved", approved_at=now.isoformat())
-        elif kind == "no" and it["status"] in ("pending", "drafted", "approved"):
-            ledger.set_status(it, "vetoed")
+    # ١) تلغرام: موافقات بأوقاتها، تغيير مواعيد، إلغاءات — بترتيب وقوعها
+    events, state["tg_offset"] = tg.poll(state.get("tg_offset", 0))
+    changed = _apply_events(state, events, now)
+    state["last_poll"] = now.isoformat()
     ledger.save(state)
-    if decisions:
-        tg.notify(_queue_text(state, now))
 
     def age_h(it):
         return (now - ledger.datetime.fromisoformat(it["created"])).total_seconds() / 3600
 
-    # ٢) جلب آخر المنشورات، ثم تحديث أرقام كل ما زال في نافذة الحكم أو النقل بمعرّفاته
-    #    (الناشر النشط تخرج منشوراته من آخر ٢٠ قبل ٢٤ ساعة — بلا هذا يتجمد رقمها مبكراً)
+    # الجلب من X والحكم والصياغة مرة في الساعة. عطله لا يوقف النشر والجدولة
+    last = state.get("last_fetch")
+    if not last or (now - ledger.datetime.fromisoformat(last)).total_seconds() >= 50 * 60:
+        try:
+            _intake(state, now, age_h)
+            state["last_fetch"] = now.isoformat()
+        except Exception as e:
+            print(f"تعذّر الجلب/الصياغة هذه الدورة: {str(e)[:300]}")
+        ledger.save(state)
+
+    # معاينات أُرسلت قبل أزرار المواعيد تُعاد بلوحتها الجديدة (ثلاث في الدورة)
+    for it in items.values():
+        if it["status"] == "pending" and it.get("previewed") and "preview_msgs" not in it:
+            it["previewed"] = None
+    # المعاينات: تُرسل لكل منشور معلّق لم يُعاين بعد. المهلة تبدأ من لحظة المعاينة — لا يُنشر شيء لم تره
+    if tg.enabled():
+        for it in [i for i in items.values() if i["status"] == "pending" and not i.get("previewed")][:3]:
+            try:
+                it["preview_msgs"] = tg.preview(it)
+            except Exception as e:
+                print(f"تعذّرت المعاينة: {str(e)[:200]}")
+                break
+            it["previewed"] = now.isoformat()
+            it["deadline"] = (now + timedelta(hours=config.VETO_HOURS)).isoformat()
+            ledger.save(state)
+
+    # منشور عالق في «publishing» يعني دورة انقطعت أثناء النشر: لا يُعاد آلياً أبداً، بل يُنبَّه عنه
+    for it in items.values():
+        if it["status"] == "publishing" and not it.get("stuck_alerted"):
+            tg.notify(f"🟠 منشور عالق أثناء النشر — تحقّق يدوياً من الصفحة:\n{it['x_url']}")
+            it["stuck_alerted"] = now.isoformat()
+    ledger.save(state)
+
+    _publish_due(state, now)
+    # الجدول يُرسل بعد التسجيل عند فيسبوك ليحمل علامة ✓ الصحيحة
+    if changed:
+        tg.notify(_queue_text(state, now))
+
+
+def _intake(state: dict, now, age_h) -> None:
+    """جلب آخر المنشورات، الحكم على أدائها، وصياغة مرشح واحد."""
+    items, baseline = state["items"], state["baseline"]
+    # تحديث أرقام كل ما زال في نافذة الحكم أو النقل بمعرّفاته
+    # (الناشر النشط تخرج منشوراته من آخر ٢٠ قبل ٢٤ ساعة — بلا هذا يتجمد رقمها مبكراً)
     tweets = {t["id"]: t for t in xsrc.latest_originals(pages=1 if baseline else 3)}
     for tid, t in tweets.items():
         if tid not in items:
@@ -147,24 +221,21 @@ def cycle() -> None:
         if tid in items:
             items[tid]["score"] = xsrc.score(t)
 
-    # ٣) الحكم على ما بلغ عمر الحكم — خط الأساس يُحدَّث أولاً ثم تُحسب العتبة مرة واحدة
+    # الحكم على ما بلغ عمر الحكم — خط الأساس يُحدَّث أولاً ثم تُحسب العتبة مرة واحدة
     for it in items.values():
         if age_h(it) >= config.MIN_AGE_HOURS:
             baseline[it["id"]] = it["score"]
     thr = _threshold(baseline)
     for it in items.values():
         age = age_h(it)
-        # ما لم توافق عليه خلال يومين بعد نافذة النقل صار قديماً. الموافَق عليه لا يسقط بالعمر:
-        # مكانه في طابور الجدولة محفوظ (حتى ٣٠ يوماً) لأنك اخترته بنفسك
+        # ما لم توافق عليه خلال يومين بعد نافذة النقل صار قديماً. الموافَق عليه لا يسقط بالعمر
+        # (حتى ٣٠ يوماً) لأنك اخترت موعده بنفسك
         if it["status"] in ("candidate", "pending") and age > config.MAX_AGE_HOURS + 48:
             ledger.set_status(it, "expired", reason="تجاوز مهلة النقل")
             continue
         if it["status"] == "approved" and age > 30 * 24:
-            ledger.set_status(it, "expired", reason="بقي في الطابور أكثر من ٣٠ يوماً")
+            ledger.set_status(it, "expired", reason="بقي مجدولاً أكثر من ٣٠ يوماً")
             continue
-        # منشورات الفيديو التي أُجّلت قبل تفعيل نقل الفيديو تعود للترشيح ما دامت في المهلة
-        if it["status"] == "manual" and "غير مفعّل" in it.get("reason", "") and age <= config.MAX_AGE_HOURS + 48:
-            ledger.set_status(it, "candidate", reason="")
         if it["status"] == "seen" and age >= config.MIN_AGE_HOURS:
             if age > config.MAX_AGE_HOURS:
                 ledger.set_status(it, "expired")
@@ -177,101 +248,149 @@ def cycle() -> None:
         baseline.pop(old, None)
     ledger.save(state)
 
-    # ٤) صياغة مرشح واحد في كل دورة (الأعلى أداءً)
+    # صياغة مرشح واحد في كل جلب (الأعلى أداءً)
     cands = sorted((i for i in items.values() if i["status"] == "candidate"), key=lambda i: -i["score"])
-    if cands:
-        it = cands[0]
-        tw = tweets.get(it["id"])
-        if tw is None:
-            it.setdefault("errors", []).append("تعذّر جلب المنشور بمعرّفه")
+    if not cands:
+        return
+    it = cands[0]
+    tw = tweets.get(it["id"])
+    if tw is None:
+        it.setdefault("errors", []).append("تعذّر جلب المنشور بمعرّفه")
+        if len(it["errors"]) >= 3:
+            ledger.set_status(it, "failed", reason="تعذّر جلبه ٣ مرات (ربما حُذف)")
+    else:
+        try:
+            draft(it, tw)
+        except Exception as e:  # فشل النموذج لا يوقف الدورة؛ يعاد في الجلب التالي
+            it.setdefault("errors", []).append(str(e)[:300])
             if len(it["errors"]) >= 3:
-                ledger.set_status(it, "failed", reason="تعذّر جلبه ٣ مرات (ربما حُذف)")
-        else:
-            try:
-                draft(it, tw)
-            except Exception as e:  # فشل النموذج لا يوقف الدورة؛ يعاد في الدورة التالية
-                it.setdefault("errors", []).append(str(e)[:300])
-                if len(it["errors"]) >= 3:
-                    ledger.set_status(it, "failed", reason="فشل التحويل ٣ مرات")
-            if it["status"] == "drafted":
-                ledger.set_status(it, "approved" if config.MODE == "auto" else "pending")
-        ledger.save(state)
-        if it["status"] in ("blocked", "manual"):
-            tg.notify(f"⚪ لم يُنقل تلقائياً ({it.get('reason')}):\n{it['x_url']}")
-
-    # المعاينات: تُرسل لكل منشور معلّق لم يُعاين بعد (ولو صيغ قبل ربط تلغرام).
-    # المهلة تبدأ من لحظة المعاينة لا من لحظة الصياغة — لا يُنشر شيء لم تره.
-    if tg.enabled():
-        for it in [i for i in items.values() if i["status"] == "pending" and not i.get("previewed")][:3]:
-            try:
-                tg.preview(it)
-            except Exception as e:
-                print(f"تعذّرت المعاينة: {str(e)[:200]}")
-                break
-            it["previewed"] = now.isoformat()
-            it["deadline"] = (now + timedelta(hours=config.VETO_HOURS)).isoformat()
-            ledger.save(state)
-
-    # منشور عالق في «publishing» يعني دورة انقطعت أثناء النشر: لا يُعاد آلياً أبداً، بل يُنبَّه عنه
-    for it in items.values():
-        if it["status"] == "publishing" and not it.get("stuck_alerted"):
-            tg.notify(f"🟠 منشور عالق أثناء النشر — تحقّق يدوياً من الصفحة:\n{it['x_url']}")
-            it["stuck_alerted"] = now.isoformat()
+                ledger.set_status(it, "failed", reason="فشل التحويل ٣ مرات")
+        if it["status"] == "drafted":
+            ledger.set_status(it, "approved" if config.MODE == "auto" else "pending")
     ledger.save(state)
+    if it["status"] in ("blocked", "manual"):
+        tg.notify(f"⚪ لم يُنقل تلقائياً ({it.get('reason')}):\n{it['x_url']}")
 
-    # ٥) النشر: منشور واحد يومياً داخل نافذة النشر
-    day = now.astimezone(RIYADH).date().isoformat()
-    if state["published_days"].get(day, 0) >= config.MAX_PER_DAY or not _in_window(now):
-        return
-    ready = []
-    for it in items.values():
-        if it["status"] == "approved":
-            ready.append(it)
-        elif (it["status"] == "pending" and config.MODE == "veto" and it.get("deadline")
-              and now >= ledger.datetime.fromisoformat(it["deadline"])):
-            ready.append(it)
-    if not ready:
-        return
-    it = _queue(ready)[0]  # الأقدم موافقةً أولاً — ترتيب ضغطك هو ترتيب النشر
-    if not config.FB_PAGE_TOKEN:
-        print("FB_PAGE_TOKEN غير مضبوط — تخطّي النشر")
-        return
-    # الصفحة نفسها مصدر الحقيقة: لو ضاع حفظ السجل في دورة سابقة (فشل push مثلاً)
-    # يبقى المنشور على الصفحة شاهداً — لا نشر مكرر، ولا أكثر من منشور في اليوم ولو نشرتَ يدوياً
-    try:
-        posts = fb.recent_posts()
-    except Exception as e:
-        print(f"تعذّر قراءة الصفحة قبل النشر — لا نشر هذه الدورة: {str(e)[:200]}")
-        return
-    if fb.already_posted(it["fb_text"], posts):
-        ledger.set_status(it, "published", reason="وُجد على الصفحة مسبقاً")
-        ledger.save(state)
-        return
-    today = sum(1 for p in posts
-                if ledger.datetime.fromisoformat(p["created_time"].replace("+0000", "+00:00")).astimezone(RIYADH).date().isoformat() == day)
-    if today >= config.MAX_PER_DAY:
-        state["published_days"][day] = today
-        ledger.save(state)
-        return
 
+def _send(state: dict, it: dict, now, at=None) -> bool:
+    """طلب واحد إلى فيسبوك: نشر فوري (at=None) أو تسجيل موعد. طابع الادّعاء يُحفظ قبل الطلب."""
     ledger.set_status(it, "publishing")
-    state["published_days"][day] = state["published_days"].get(day, 0) + 1  # يُحتسب اليوم مع المحاولة لا مع النجاح
-    ledger.save(state)  # الادّعاء محفوظ قبل الطلب
+    if not at:  # عدّاد اليوم للنشر الفوري فقط؛ المجدول يُعدّ من حالته في السجل
+        day = now.astimezone(schedule.MAKKAH).date().isoformat()
+        state["published_days"][day] = state["published_days"].get(day, 0) + 1
+    ledger.save(state)
+    at_unix = int(at.timestamp()) if at else None
     try:
         if it.get("video_url"):
-            fb_id = fb.publish_video(it["fb_text"], it["video_url"])
+            fb_id = fb.publish_video(it["fb_text"], it["video_url"], at_unix)
         else:
-            fb_id = fb.publish(it["fb_text"], it["photos"] if it.get("use_media") else None)
+            fb_id = fb.publish(it["fb_text"], it["photos"] if it.get("use_media") else None, at_unix)
     except Exception as e:
         # مهلة انتهت بعد POST ناجح ممكنة: الحالة «uncertain» لا تُعاد آلياً، وحارس الصفحة يحسمها لاحقاً
         timeout = "timed out" in str(e).lower() or isinstance(e, TimeoutError)
         ledger.set_status(it, "uncertain" if timeout else "failed", reason=str(e)[:500])
         ledger.save(state)
-        tg.notify(f"🔴 {'نتيجة النشر غير مؤكدة' if timeout else 'فشل النشر'}: {str(e)[:300]}\n{it['x_url']}")
-        return
-    ledger.set_status(it, "published", fb_id=fb_id)
+        tg.notify(f"🔴 {'نتيجة الطلب غير مؤكدة — تحقّق من الصفحة' if timeout else 'فشل النشر'}: "
+                  f"{str(e)[:300]}\n{it['x_url']}")
+        return False
+    ledger.set_status(it, "scheduled" if at else "published", fb_id=fb_id)
     ledger.save(state)
-    tg.notify(f"✅ نُشر على الصفحة: https://facebook.com/{fb_id}")
+    return True
+
+
+def _adopt(it: dict, post: dict) -> None:
+    """منشور وُجد على الصفحة ولم يسجّله سجلنا (ضاع حفظ دورة سابقة): نتبنّاه بمعرّفه ليبقى قابلاً للإلغاء."""
+    ledger.set_status(it, "scheduled" if post.get("scheduled") else "published",
+                      fb_id=post.get("id", ""), reason="وُجد على الصفحة مسبقاً")
+
+
+def _publish_due(state: dict, now) -> None:
+    """المواعيد البعيدة تُسجَّل عند فيسبوك فينشرها في دقيقتها؛ وما حان موعده يُنشر الآن (واحد في الدورة).
+    كل ما يمر من الفلتر وتوافق عليه يُنشر — العدد اليومي يتبع إيقاعك على X، وMAX_PER_DAY صمام أمان فقط."""
+    items = state["items"]
+    parse = ledger.datetime.fromisoformat
+
+    # ما سُجّل عند فيسبوك وفات موعده: نتحقق أنه نُشر فعلاً قبل أن نقول «نُشر»
+    for it in items.values():
+        if it["status"] != "scheduled" or not it.get("publish_at") or now < parse(it["publish_at"]) + timedelta(minutes=5):
+            continue
+        live = fb.is_live(it.get("fb_id", ""), bool(it.get("video_url"))) if it.get("fb_id") else None
+        late = now >= parse(it["publish_at"]) + timedelta(hours=6)
+        if live:
+            ledger.set_status(it, "published")
+            tg.notify(f"✅ نُشر في موعده: https://facebook.com/{it['fb_id']}")
+        elif live is False or late:
+            ledger.set_status(it, "uncertain", reason="فات موعده ولم يظهر منشوراً على الصفحة")
+            tg.notify(f"🔴 منشور مجدول فات موعده ولم أجده منشوراً — تحقّق من الصفحة:\n{it['x_url']}")
+        # live is None ولم يطل التأخر: يُعاد الفحص في الدورة التالية
+    ledger.save(state)
+
+    later, due = [], []
+    for it in items.values():
+        at = parse(it["publish_at"]) if it.get("publish_at") else None
+        if it["status"] == "approved":
+            if at and (at - now).total_seconds() >= fb.MIN_LEAD_SECONDS:
+                later.append(it)
+            elif not at or now >= at:
+                due.append(it)
+            # موعد أقرب من هامش الجدولة ولم يحن: ينتظر الدورة التي تليه
+        elif (it["status"] == "pending" and config.MODE == "veto" and it.get("deadline")
+              and now >= parse(it["deadline"])):
+            due.append(it)
+    if not later and not due:
+        return
+    if not config.FB_PAGE_TOKEN:
+        print("FB_PAGE_TOKEN غير مضبوط — تخطّي النشر")
+        return
+    # الصفحة نفسها مصدر الحقيقة: لو ضاع حفظ السجل في دورة سابقة (فشل push مثلاً)
+    # يبقى المنشور (أو موعده) على الصفحة شاهداً — لا نشر ولا جدولة مكررة
+    try:
+        posts = fb.recent_posts()
+    except Exception as e:
+        print(f"تعذّر قراءة الصفحة قبل النشر — لا نشر هذه الدورة: {str(e)[:200]}")
+        return
+
+    def cap_reached(when) -> bool:
+        day = when.astimezone(schedule.MAKKAH).date().isoformat()
+        live = sum(1 for p in posts if not p.get("scheduled")
+                   and parse(p["created_time"].replace("+0000", "+00:00"))
+                   .astimezone(schedule.MAKKAH).date().isoformat() == day)
+        booked = sum(1 for i in items.values() if i["status"] == "scheduled" and i.get("publish_at")
+                     and parse(i["publish_at"]).astimezone(schedule.MAKKAH).date().isoformat() == day)
+        return max(live, state["published_days"].get(day, 0)) + booked >= config.MAX_PER_DAY
+
+    def capped(it) -> None:
+        if not it.get("cap_alerted"):
+            tg.notify(f"🟠 بلغ ذلك اليوم سقف الأمان ({config.MAX_PER_DAY} منشورات) — هذا المنشور ينتظر، "
+                      f"اختر له يوماً آخر:\n{it['fb_text'].strip().splitlines()[0][:50]}")
+            it["cap_alerted"] = now.isoformat()
+
+    for it in _queue(later):
+        found = fb.find_posted(it["fb_text"], posts)
+        if found:
+            _adopt(it, found)
+            continue
+        at = parse(it["publish_at"])
+        if cap_reached(at):
+            capped(it)
+            continue
+        _send(state, it, now, at)
+    ledger.save(state)
+
+    if not due:
+        return
+    it = _queue(due)[0]
+    found = fb.find_posted(it["fb_text"], posts)
+    if found:
+        _adopt(it, found)
+        ledger.save(state)
+        return
+    if cap_reached(now):
+        capped(it)
+        ledger.save(state)
+        return
+    if _send(state, it, now):
+        tg.notify(f"✅ نُشر على الصفحة: https://facebook.com/{it['fb_id']}")
 
 
 def dry(n: int, min_age: float) -> None:
@@ -331,7 +450,7 @@ def check() -> int:
         line("التحويل (Anthropic API)", bool(config.ANTHROPIC_API_KEY), config.ANTHROPIC_MODEL)
     else:
         line("التحويل (Gemini)", bool(config.GEMINI_API_KEY))
-    print("الوضع:", config.MODE, "· نافذة النشر:", config.PUBLISH_HOURS, "بتوقيت الرياض")
+    print("الوضع:", config.MODE, "· المواعيد تُختار من تلغرام بتوقيت مكة · سقف الأمان اليومي:", config.MAX_PER_DAY)
     return 0 if ok else 1
 
 
