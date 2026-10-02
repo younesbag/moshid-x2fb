@@ -90,6 +90,17 @@ def photos(tweets) -> list[str]:
             if m.get("type") == "photo" and m.get("media_url_https")]
 
 
+def video_url(tweets) -> str:
+    """أعلى نسخة MP4 جودةً لأول فيديو في المنشور/الثريد (رابط عام على video.twimg.com)."""
+    for m in _media(tweets):
+        if m.get("type") in ("video", "animated_gif"):
+            mp4 = [v for v in (m.get("video_info") or {}).get("variants", [])
+                   if v.get("content_type") == "video/mp4" and v.get("url")]
+            if mp4:
+                return max(mp4, key=lambda v: v.get("bitrate") or 0)["url"]
+    return ""
+
+
 def has_video(tweets) -> bool:
     return any(m.get("type") in ("video", "animated_gif") for m in _media(tweets))
 

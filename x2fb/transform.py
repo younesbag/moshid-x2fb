@@ -23,7 +23,9 @@ def build_input(chain: list[dict]) -> str:
     media = _media(chain)
     if media:
         kinds = ", ".join(sorted({m.get("type", "?") for m in media}))
-        lines.append(f"(مرفقات: {len(media)} — {kinds}. لا ترى محتوى الصور.)")
+        lines.append(f"(مرفقات: {len(media)} — {kinds}. لا ترى محتواها.)")
+        if any(m.get("type") in ("video", "animated_gif") for m in media):
+            lines.append("(الفيديو المرفق سيُنشر مع منشور فيسبوك نفسه — الإشارة إليه في النص تبقى صحيحة.)")
     q = head.get("quoted_tweet")
     if isinstance(q, dict) and q.get("text"):
         who = (q.get("author") or {}).get("userName", "?")

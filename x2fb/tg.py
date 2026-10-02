@@ -39,9 +39,10 @@ def preview(item: dict) -> None:
     head = (f"🟡 منشور مقترح لصفحة فيسبوك\n"
             f"من: {item['x_url']}\n"
             f"أداؤه على X: {item['score']:.0f} نقطة (ضمن الأعلى {item.get('percentile', 0):.0f}٪ من منشوراتك)\n"
-            f"الصور: {len(item.get('photos', [])) if item.get('use_media') else 0}\n"
+            f"المرفق: {'🎬 فيديو المنشور الأصلي' if item.get('video_url') else (str(len(item.get('photos', []))) + ' صورة' if item.get('use_media') else 'لا شيء')}\n"
             f"────────\n")
-    rule = ("\n────────\nلن يُنشر إلا بضغط «نشر». ويمكنك الإلغاء حتى بعد الموافقة ما دام لم يُنشر." if config.MODE == "approval"
+    rule = ("\n────────\n«نشر» يضيفه إلى طابور الجدولة (منشور واحد يومياً بترتيب موافقتك). "
+            "يمكنك الإلغاء ما دام لم يُنشر." if config.MODE == "approval"
             else f"\n────────\nسيُنشر تلقائياً بعد {config.VETO_HOURS:g} ساعات في نافذة النشر ما لم تضغط «إلغاء».")
     send(head + item["fb_text"] + rule, [("✅ نشر", f"ok:{item['id']}"), ("❌ إلغاء", f"no:{item['id']}")])
 

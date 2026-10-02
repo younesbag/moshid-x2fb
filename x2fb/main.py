@@ -41,23 +41,63 @@ def draft(item: dict, tweet: dict) -> None:
         ledger.set_status(item, "skipped", reason="مقال X طويل")
         return
     chain = xsrc.thread_chain(tweet)
-    if xsrc.has_video(chain):
-        ledger.set_status(item, "manual", reason="فيه فيديو — النقل الآلي للفيديو غير مفعّل")
+    video = xsrc.video_url(chain)
+    if xsrc.has_video(chain) and not video:
+        ledger.set_status(item, "manual", reason="فيه فيديو بلا نسخة MP4 قابلة للنقل")
         return
     item["photos"] = xsrc.photos(chain)
+    item["video_url"] = video
     out = transform(chain)
     if out.get("decision") != "publish":
         ledger.set_status(item, "skipped", reason=out.get("skip_reason", "قرار النموذج"))
         return
     text = out["text"].strip()
-    use_media = bool(out.get("use_media")) and bool(item["photos"])
-    problems = gate.check(text, use_media)
+    # الفيديو يُنقل دائماً مع منشوره؛ الصور بقرار النموذج. والفيديو يغني عن الصور
+    use_media = bool(out.get("use_media")) and bool(item["photos"]) and not video
+    problems = gate.check(text, use_media or bool(video))
     if problems:
         ledger.set_status(item, "blocked", reason="البوابة: " + "، ".join(problems), fb_text=text)
         return
     ledger.set_status(item, "drafted", fb_text=text + "\n\n" + config.SIGNATURE,
                       use_media=use_media, notes=out.get("notes", ""),
                       thread_len=len(chain))
+
+
+def _queue(items: list[dict]) -> list[dict]:
+    return sorted(items, key=lambda i: i.get("approved_at") or i.get("deadline") or i["created"])
+
+
+def _slots(state: dict, now, n: int) -> list:
+    """أيام النشر المتوقعة لأول n بنداً في الطابور: خانة MAX_PER_DAY يومياً تبدأ من أول يوم فيه متسع."""
+    start, end = (int(x) for x in config.PUBLISH_HOURS.split("-"))
+    local = now.astimezone(RIYADH)
+    day = local.date()
+    used = state["published_days"].get(day.isoformat(), 0)
+    if local.hour >= end:  # فاتت نافذة اليوم
+        day, used = day + timedelta(days=1), 0
+    out = []
+    while len(out) < n:
+        free = max(0, config.MAX_PER_DAY - used)
+        out += [day] * min(free, n - len(out))
+        day, used = day + timedelta(days=1), 0
+    return out
+
+
+DAYS = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
+
+
+def _queue_text(state: dict, now) -> str:
+    q = _queue([i for i in state["items"].values() if i["status"] == "approved"])
+    if not q:
+        return "🗓 طابور النشر فارغ."
+    start = config.PUBLISH_HOURS.split("-")[0]
+    lines = [f"🗓 جدول النشر ({len(q)}) — منشور {config.MAX_PER_DAY} يومياً حوالي {start}:17 بتوقيت الرياض:"]
+    for it, d in zip(q, _slots(state, now, len(q))):
+        first = it["fb_text"].strip().splitlines()[0][:60]
+        kind = "🎬 " if it.get("video_url") else ("🖼 " if it.get("use_media") else "")
+        lines.append(f"• {DAYS[d.weekday()]} {d.day}/{d.month}: {kind}{first}")
+    lines.append("للإلغاء: اضغط «❌ إلغاء» تحت معاينة المنشور.")
+    return chr(10).join(lines)
 
 
 def _in_window(dt) -> bool:
@@ -78,10 +118,12 @@ def cycle() -> None:
         if not it:
             continue
         if kind == "ok" and it["status"] in ("pending", "drafted"):
-            ledger.set_status(it, "approved")
+            ledger.set_status(it, "approved", approved_at=now.isoformat())
         elif kind == "no" and it["status"] in ("pending", "drafted", "approved"):
             ledger.set_status(it, "vetoed")
     ledger.save(state)
+    if decisions:
+        tg.notify(_queue_text(state, now))
 
     def age_h(it):
         return (now - ledger.datetime.fromisoformat(it["created"])).total_seconds() / 3600
@@ -112,10 +154,17 @@ def cycle() -> None:
     thr = _threshold(baseline)
     for it in items.values():
         age = age_h(it)
-        # ما لم يُنشر خلال يومين بعد نافذة النقل صار قديماً — لا يُنشر متأخراً
-        if it["status"] in ("candidate", "pending", "approved") and age > config.MAX_AGE_HOURS + 48:
+        # ما لم توافق عليه خلال يومين بعد نافذة النقل صار قديماً. الموافَق عليه لا يسقط بالعمر:
+        # مكانه في طابور الجدولة محفوظ (حتى ٣٠ يوماً) لأنك اخترته بنفسك
+        if it["status"] in ("candidate", "pending") and age > config.MAX_AGE_HOURS + 48:
             ledger.set_status(it, "expired", reason="تجاوز مهلة النقل")
             continue
+        if it["status"] == "approved" and age > 30 * 24:
+            ledger.set_status(it, "expired", reason="بقي في الطابور أكثر من ٣٠ يوماً")
+            continue
+        # منشورات الفيديو التي أُجّلت قبل تفعيل نقل الفيديو تعود للترشيح ما دامت في المهلة
+        if it["status"] == "manual" and "غير مفعّل" in it.get("reason", "") and age <= config.MAX_AGE_HOURS + 48:
+            ledger.set_status(it, "candidate", reason="")
         if it["status"] == "seen" and age >= config.MIN_AGE_HOURS:
             if age > config.MAX_AGE_HOURS:
                 ledger.set_status(it, "expired")
@@ -183,7 +232,7 @@ def cycle() -> None:
             ready.append(it)
     if not ready:
         return
-    it = max(ready, key=lambda i: i["score"])
+    it = _queue(ready)[0]  # الأقدم موافقةً أولاً — ترتيب ضغطك هو ترتيب النشر
     if not config.FB_PAGE_TOKEN:
         print("FB_PAGE_TOKEN غير مضبوط — تخطّي النشر")
         return
@@ -209,7 +258,10 @@ def cycle() -> None:
     state["published_days"][day] = state["published_days"].get(day, 0) + 1  # يُحتسب اليوم مع المحاولة لا مع النجاح
     ledger.save(state)  # الادّعاء محفوظ قبل الطلب
     try:
-        fb_id = fb.publish(it["fb_text"], it["photos"] if it.get("use_media") else None)
+        if it.get("video_url"):
+            fb_id = fb.publish_video(it["fb_text"], it["video_url"])
+        else:
+            fb_id = fb.publish(it["fb_text"], it["photos"] if it.get("use_media") else None)
     except Exception as e:
         # مهلة انتهت بعد POST ناجح ممكنة: الحالة «uncertain» لا تُعاد آلياً، وحارس الصفحة يحسمها لاحقاً
         timeout = "timed out" in str(e).lower() or isinstance(e, TimeoutError)

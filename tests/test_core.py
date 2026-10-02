@@ -75,5 +75,36 @@ class Telegram(unittest.TestCase):
         self.assertEqual(offset, 5)
 
 
+class Schedule(unittest.TestCase):
+    def test_one_per_day_in_approval_order(self):
+        from datetime import datetime, timezone
+        from x2fb import config
+        now = datetime(2026, 10, 2, 9, 0, tzinfo=timezone.utc)  # 12:00 الرياض، قبل النافذة
+        state = {"published_days": {}, "items": {
+            "a": {"id": "a", "status": "approved", "approved_at": "2026-10-02T08:00:00+00:00", "created": "x", "fb_text": "أول"},
+            "b": {"id": "b", "status": "approved", "approved_at": "2026-10-02T07:00:00+00:00", "created": "x", "fb_text": "ثانٍ"},
+            "c": {"id": "c", "status": "pending", "created": "x", "fb_text": "معلّق"}}}
+        with mock.patch.object(config, "MAX_PER_DAY", 1), mock.patch.object(config, "PUBLISH_HOURS", "17-22"):
+            q = main._queue([i for i in state["items"].values() if i["status"] == "approved"])
+            self.assertEqual([i["id"] for i in q], ["b", "a"])
+            days = main._slots(state, now, 3)
+            self.assertEqual([d.day for d in days], [2, 3, 4])
+            state["published_days"]["2026-10-02"] = 1  # نُشر اليوم
+            self.assertEqual([d.day for d in main._slots(state, now, 2)], [3, 4])
+            late = datetime(2026, 10, 2, 20, 0, tzinfo=timezone.utc)  # 23:00 الرياض، بعد النافذة
+            self.assertEqual(main._slots({"published_days": {}}, late, 1)[0].day, 3)
+            self.assertIn("ثانٍ", main._queue_text(state, now).splitlines()[1])
+
+
+class Video(unittest.TestCase):
+    def test_picks_highest_bitrate_mp4(self):
+        t = {"extendedEntities": {"media": [{"type": "video", "video_info": {"variants": [
+            {"content_type": "application/x-mpegURL", "url": "m3u8"},
+            {"content_type": "video/mp4", "bitrate": 832000, "url": "low"},
+            {"content_type": "video/mp4", "bitrate": 10368000, "url": "high"}]}}]}}
+        self.assertEqual(xsrc.video_url(t), "high")
+        self.assertEqual(xsrc.video_url({"extendedEntities": {"media": [{"type": "photo"}]}}), "")
+
+
 if __name__ == "__main__":
     unittest.main()

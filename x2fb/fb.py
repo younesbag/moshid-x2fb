@@ -32,6 +32,14 @@ def publish(message: str, photo_urls: list[str] | None = None) -> str:
     return r["id"]
 
 
+def publish_video(description: str, file_url: str) -> str:
+    """فيديو برابط عام: ميتا تسحب الملف بنفسها (فيسبوك يعرضه ريلز). بلا إعادة محاولة كبقية النشر."""
+    r = request("POST", f"https://graph-video.facebook.com/{config.GRAPH_VERSION}/{config.FB_PAGE_ID}/videos",
+                data={"file_url": file_url, "description": description, "access_token": config.FB_PAGE_TOKEN},
+                retries=0, timeout=300)
+    return r["id"]
+
+
 def recent_posts(limit: int = 15) -> list[dict]:
     """آخر منشورات الصفحة — مصدر الحقيقة عن «ما نُشر» لا السجل وحده."""
     r = request("GET", _url(f"{config.FB_PAGE_ID}/posts"),
