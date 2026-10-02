@@ -1,13 +1,20 @@
 """طلبات HTTP بمكتبة بايثون القياسية فقط — لا تبعيات."""
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
 
+def redact(text: str) -> str:
+    """ميتا تعيد التوكن نفسه داخل رسالة الخطأ («Malformed access token EAA…») — يُحجب قبل أي طباعة أو حفظ."""
+    return re.sub(r"[A-Za-z0-9_\-]{40,}", "[محجوب]", text)
+
+
 class HttpError(RuntimeError):
     def __init__(self, status: int, body: str):
+        body = redact(body)
         super().__init__(f"HTTP {status}: {body[:500]}")
         self.status = status
         self.body = body
