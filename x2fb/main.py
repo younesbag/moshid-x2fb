@@ -236,6 +236,10 @@ def _intake(state: dict, now, age_h) -> None:
         if it["status"] == "approved" and age > 30 * 24:
             ledger.set_status(it, "expired", reason="بقي مجدولاً أكثر من ٣٠ يوماً")
             continue
+        # منشورات الفيديو التي أُجّلت قبل تفعيل نقل الفيديو تعود للترشيح ما دامت في المهلة
+        if it["status"] == "manual" and "غير مفعّل" in it.get("reason", "") and age <= config.MAX_AGE_HOURS + 48:
+            ledger.set_status(it, "candidate", reason="")
+            continue
         if it["status"] == "seen" and age >= config.MIN_AGE_HOURS:
             if age > config.MAX_AGE_HOURS:
                 ledger.set_status(it, "expired")
