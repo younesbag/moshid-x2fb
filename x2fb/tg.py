@@ -26,12 +26,28 @@ def send(text: str, keyboard: list[list[tuple[str, str]]] | None = None) -> list
     for n, chunk in enumerate(chunks):
         data = {"chat_id": config.TG_CHAT_ID, "text": chunk, "disable_web_page_preview": "true"}
         if keyboard and n == len(chunks) - 1:
-            data["reply_markup"] = json.dumps(
-                {"inline_keyboard": [[{"text": t, "callback_data": c} for t, c in row] for row in keyboard]})
+            data["reply_markup"] = _markup(keyboard)
         mid = (_api("sendMessage", **data).get("result") or {}).get("message_id")
         if mid:
             ids.append(mid)
     return ids
+
+
+def _markup(keyboard: list[list[tuple[str, str]]]) -> str:
+    """زر قيمته رابط يُفتح في المتصفح؛ غيره زر استدعاء."""
+    return json.dumps({"inline_keyboard": [
+        [{"text": t, "url": c} if c.startswith("http") else {"text": t, "callback_data": c} for t, c in row]
+        for row in keyboard]})
+
+
+def set_keyboard(message_id: int, keyboard: list[list[tuple[str, str]]]) -> None:
+    """يبدّل أزرار رسالة معاينة سابقة لتعكس حالة منشورها الحالية."""
+    try:
+        _api("editMessageReplyMarkup", chat_id=config.TG_CHAT_ID, message_id=str(message_id),
+             reply_markup=_markup(keyboard))
+    except Exception as e:
+        if "message is not modified" not in str(e):  # نفس الأزرار أصلاً: لا شيء يُفعل
+            raise
 
 
 def notify(text: str) -> None:
@@ -42,9 +58,11 @@ def notify(text: str) -> None:
         print(f"تعذّر إشعار تلغرام: {str(e)[:200]}")
 
 
-def keyboard(xid: str) -> list[list[tuple[str, str]]]:
+def keyboard(xid: str, status_line: str | None = None) -> list[list[tuple[str, str]]]:
+    """لوحة المعاينة. status_line يضيف سطر حالة في أعلاها (مجدول/ينتظر) مع بقاء أزرار التغيير والإلغاء."""
     slots = [(s, f"at:{xid}:{s.replace(':', '')}") for s in SLOTS]
-    return [[("✅ انشر الآن", f"now:{xid}")], slots[:4], slots[4:], [("❌ إلغاء", f"no:{xid}")]]
+    first = [(status_line, f"noop:{xid}")] if status_line else [("✅ انشر الآن", f"now:{xid}")]
+    return [first, slots[:4], slots[4:], [("❌ إلغاء", f"no:{xid}")]]
 
 
 def preview(item: dict) -> list[int]:
@@ -89,6 +107,12 @@ def poll(offset: int, wait: int = 0) -> tuple[list[dict], int]:
             xid, _, arg = rest.partition(":")
             if kind == "ok":  # أزرار المعاينات القديمة قبل الجدولة
                 kind = "now"
+            if kind == "noop":  # زر حالة: يعرض فقط
+                try:
+                    _api("answerCallbackQuery", callback_query_id=cq["id"], text="هذه حالة المنشور الحالية")
+                except Exception:
+                    pass
+                continue
             if kind in ("now", "at", "no") and xid:
                 events.append({"kind": kind, "id": xid, "arg": arg})
                 try:

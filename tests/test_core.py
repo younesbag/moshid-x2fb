@@ -183,6 +183,26 @@ class Schedule(unittest.TestCase):
         self.assertEqual(st["items"]["a"]["status"], "approved")
         self.assertEqual(st["items"]["b"]["status"], "expired")
 
+    def test_keyboards_follow_status(self):
+        from x2fb import tg
+        st = self._state()
+        st["items"]["a"].update(status="published", fb_id="1_2", kb_msgs=[700])
+        st["items"]["b"].update(status="scheduled", fb_id="p", publish_at="2026-10-03T17:00:00+00:00")  # preview_msgs[-1]=501
+        st["items"]["c"].update(status="vetoed")
+        with mock.patch.object(tg, "_api") as api, mock.patch.object(main.config, "TG_BOT_TOKEN", "t"), \
+             mock.patch.object(main.config, "TG_CHAT_ID", "42"):
+            main._sync_keyboards(st, self.now)
+            calls = {c.kwargs["message_id"]: __import__("json").dumps(__import__("json").loads(c.kwargs["reply_markup"]), ensure_ascii=False) for c in api.call_args_list}
+            self.assertEqual(set(calls), {"700", "601", "501", "602", "502"})
+            self.assertIn("https://facebook.com/1_2", calls["700"])
+            self.assertNotIn("now:", calls["700"])
+            self.assertIn("اليوم 20:00", calls["501"])
+            self.assertIn("no:b", calls["501"])           # المجدول يبقى قابلاً للإلغاء
+            self.assertNotIn("now:", calls["502"])
+            api.reset_mock()
+            main._sync_keyboards(st, self.now)            # لا تغيير ← لا طلبات
+            api.assert_not_called()
+
     def test_short_time_reply_is_schedule_not_edit(self):
         st = self._state()
         rev, _, _ = self._edit(st, "19:45")

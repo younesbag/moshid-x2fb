@@ -234,7 +234,10 @@ def cycle(wait: int = 0) -> None:
         for it in [i for i in items.values() if i["status"] == "pending" and not i.get("previewed")][:3]:
             try:
                 # تُضاف معرّفات المعاينة الجديدة إلى القديمة: الرد على أي معاينة سابقة يبقى منسوباً لمنشورها
-                it["preview_msgs"] = (it.get("preview_msgs") or []) + tg.preview(it)
+                sent = tg.preview(it)
+                it["preview_msgs"] = (it.get("preview_msgs") or []) + sent
+                it["kb_msgs"] = (it.get("kb_msgs") or []) + sent[-1:]  # الأزرار على آخر جزء من كل معاينة
+                it["kb_state"] = "pending"
             except Exception as e:
                 print(f"تعذّرت المعاينة: {str(e)[:200]}")
                 break
@@ -250,9 +253,56 @@ def cycle(wait: int = 0) -> None:
     ledger.save(state)
 
     _publish_due(state, now)
+    if tg.enabled():
+        _sync_keyboards(state, now)
+        ledger.save(state)
     # الجدول يُرسل بعد التسجيل عند فيسبوك ليحمل علامة ✓ الصحيحة
     if changed:
         tg.notify(_queue_text(state, now))
+
+
+def _status_keyboard(it: dict, now):
+    """الأزرار التي تعكس حالة المنشور: لا يبقى «انشر الآن» تحت منشور نُشر أو أُلغي."""
+    xid, st = it["id"], it["status"]
+    at = it.get("publish_at")
+    when = schedule.label(ledger.datetime.fromisoformat(at), now) if at else ""
+    if st == "published":
+        url = f"https://facebook.com/{it['fb_id']}" if it.get("fb_id") else f"noop:{xid}"
+        return [[("✅ نُشر على الصفحة" + (" — افتحه" if it.get("fb_id") else ""), url)]]
+    if st == "scheduled":
+        return tg.keyboard(xid, f"🗓 مجدول عند فيسبوك: {when} ✓")
+    if st == "approved":
+        return tg.keyboard(xid, f"⏳ موافَق — {when}" if when else "⏳ يُنشر في الدقائق القادمة")
+    if st in ("publishing", "uncertain"):
+        return [[("⏳ قيد النشر — تحقّق من الصفحة" if st == "publishing" else "⚠️ نتيجة النشر غير مؤكدة", f"noop:{xid}")]]
+    if st == "vetoed":
+        return [[("❌ أُلغي", f"noop:{xid}")]]
+    if st == "failed":
+        return [[("🔴 فشل النشر", f"noop:{xid}")]]
+    if st == "pending":
+        return tg.keyboard(xid)
+    return None  # expired وغيرها: تبقى الأزرار كما هي (المنتهي يمكن إعادته بضغطة)
+
+
+def _sync_keyboards(state: dict, now) -> None:
+    """يحدّث أزرار كل معاينة تغيّرت حالة منشورها منذ آخر عرض. فشل التحديث لا يوقف الدورة."""
+    for it in state["items"].values():
+        msgs = it.get("kb_msgs") or it.get("preview_msgs") or []  # معاينات قبل kb_msgs: كلها رسالة واحدة غالباً
+        if not msgs:
+            continue
+        key = f"{it['status']}|{it.get('publish_at', '')}|{it.get('fb_id', '')}"
+        if it.get("kb_state") == key:
+            continue
+        kb = _status_keyboard(it, now)
+        if kb is None:
+            it["kb_state"] = key
+            continue
+        try:
+            for m in msgs:
+                tg.set_keyboard(m, kb)
+            it["kb_state"] = key
+        except Exception as e:
+            print(f"تعذّر تحديث أزرار المعاينة: {str(e)[:200]}")
 
 
 def _intake(state: dict, now, age_h) -> None:
