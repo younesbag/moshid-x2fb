@@ -187,7 +187,7 @@
    "video": false,
    "quote": true,
    "article": false,
-   "status": "pending",
+   "status": "expired",
    "history": [
     [
      "2026-09-27T07:04:44+00:00",
@@ -204,6 +204,10 @@
     [
      "2026-09-30T00:28:28+00:00",
      "pending"
+    ],
+    [
+     "2026-10-03T06:45:54+00:00",
+     "expired"
     ]
    ],
    "percentile": 22.5,
@@ -215,7 +219,8 @@
    "deadline": "2026-10-02T15:23:40.189877+00:00",
    "preview_msgs": [
     9
-   ]
+   ],
+   "reason": "تجاوز مهلة النقل"
   },
   "2103546453037867076": {
    "id": "2103546453037867076",
@@ -1906,7 +1911,7 @@
    "x_url": "https://x.com/younesbag1/status/2106048060145152173",
    "created": "2026-10-02T15:46:00+00:00",
    "text": "إذا تشغل Claude Code بنموذج واحد بس... أنت تارك أقوى ستاك حاليا على الطاولة.\nأنا أشغله كذا:\n\nOpus 5.5 = يخطط ويدير\nSonnet 5.5 = الـworkers ينفذون\nFable 5.1 = تصعيد للمشاكل الثقيلة\nGPT-6.1 Sol عبر Codex = reviewer مستقل يقرأ فقط\nيعني Opus يخطط → Sonnet يبني → Sol يراجع → Sonnet يصلح\nوFable ما يدخل إلا إذا تعقدت الأمور فعلا.\n\nوهذا البرومبت يخلي Claude Code يبني لك النظام داخل مشروعك:\nحوّل هذا المشروع إلى multi-model system:\n\nOpus 5.5 = orchestrator/planner\nSonnet 5.5 = worker sub-agents\nFable 5.1 = escalation فقط\nGPT-6.1 Sol عبر Codex CLI = read-only reviewer ممنوع عليه تعديل الملفات\n\nافحص المشروع وإعدادات Claude Code ثم طبّق النظام فعليا باستخدام CLAUDE.md + agents + skills + hooks.\n\nالمسار: Opus يخطط → Sonnet ينفذ → Sol يراجع الـdiff → Sonnet يصلح → Sol يعيد المراجعة حتى PASS.\n\nاستدعِ Fable فقط عند الحاجة الحقيقية، وافرض read-only على Codex تقنيا واختبره.\n\nلا تشرح لي كيف أبنيه. ابنِه واختبره\nواتركه جاهزا.\n\nبالنسبة لي هذا حاليا أقوى setup داخل Claude Code.",
-   "score": 314,
+   "score": 328,
    "photos": [],
    "video": false,
    "quote": false,
@@ -1986,5 +1991,5 @@
   "2105623891205050442": 503,
   "2105685451621437861": 170
  },
- "last_fetch": "2026-10-03T05:55:08.057643+00:00"
+ "last_fetch": "2026-10-03T06:45:51.807269+00:00"
 }
