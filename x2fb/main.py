@@ -149,6 +149,14 @@ def _apply_events(state: dict, events: list[dict], now) -> bool:
                 at = schedule.resolve(int(ev["arg"][:2]), int(ev["arg"][2:]), press_ref)
         if not it:
             continue
+        # الرسالة التي ضُغط زرها تُضم لرسائل المنشور: معاينة قديمة أُرسلت قبل تتبّع المعرّفات
+        # تتحدث أزرارها لحالته الحقيقية (لا يبقى «نشر» تحت منشور نُشر)
+        mid = ev.get("msg_id")
+        if mid and mid not in (it.get("kb_msgs") or []):
+            it["kb_msgs"] = (it.get("kb_msgs") or []) + [mid]
+            it["kb_state"] = ""
+        if ev["kind"] == "noop":
+            continue
         first = it.get("fb_text", "").strip().splitlines()[0][:40] if it.get("fb_text") else it["x_url"]
         if it["status"] == "expired" and it.get("fb_text"):
             ledger.set_status(it, "pending", reason="أُعيد بطلبك من تلغرام")

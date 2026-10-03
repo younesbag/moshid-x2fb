@@ -107,14 +107,18 @@ def poll(offset: int, wait: int = 0) -> tuple[list[dict], int]:
             xid, _, arg = rest.partition(":")
             if kind == "ok":  # أزرار المعاينات القديمة قبل الجدولة
                 kind = "now"
-            if kind == "noop":  # زر حالة: يعرض فقط
+            if kind == "noop" and xid:  # زر حالة: لا يغيّر شيئاً، لكنه يُحدَّث إن كان قديماً
+                events.append({"kind": "noop", "id": xid, "arg": "",
+                               "msg_id": cq.get("message", {}).get("message_id")})
+            if kind == "noop":
                 try:
                     _api("answerCallbackQuery", callback_query_id=cq["id"], text="هذه حالة المنشور الحالية")
                 except Exception:
                     pass
                 continue
             if kind in ("now", "at", "no") and xid:
-                events.append({"kind": kind, "id": xid, "arg": arg})
+                events.append({"kind": kind, "id": xid, "arg": arg,
+                               "msg_id": cq.get("message", {}).get("message_id")})
                 try:
                     _api("answerCallbackQuery", callback_query_id=cq["id"], text="وصل ✓ يصلك التأكيد مع الجدول في الدورة القادمة")
                 except Exception:

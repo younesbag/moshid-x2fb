@@ -203,6 +203,19 @@ class Schedule(unittest.TestCase):
             main._sync_keyboards(st, self.now)            # لا تغيير ← لا طلبات
             api.assert_not_called()
 
+    def test_press_on_old_preview_adopts_that_message(self):
+        from x2fb import tg
+        st = self._state()
+        st["items"]["a"].update(status="published", fb_id="1_2", kb_msgs=[700], kb_state="published||1_2")
+        with mock.patch.object(tg, "notify"):
+            main._apply_events(st, [{"kind": "now", "id": "a", "arg": "", "msg_id": 41}], self.now)
+        self.assertEqual(st["items"]["a"]["kb_msgs"], [700, 41])
+        self.assertEqual(st["items"]["a"]["status"], "published")
+        with mock.patch.object(tg, "_api") as api, mock.patch.object(main.config, "TG_BOT_TOKEN", "t"), \
+             mock.patch.object(main.config, "TG_CHAT_ID", "42"):
+            main._sync_keyboards(st, self.now)
+        self.assertTrue({"700", "41"} <= {c.kwargs["message_id"] for c in api.call_args_list})
+
     def test_short_time_reply_is_schedule_not_edit(self):
         st = self._state()
         rev, _, _ = self._edit(st, "19:45")
