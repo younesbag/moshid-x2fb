@@ -28,6 +28,21 @@ def save(state: dict) -> None:
     tmp.replace(config.STATE_FILE)
 
 
+RUNTIME_FILE = config.STATE_FILE.with_name("runtime.json")  # غير مودَع: قيم تتغير كل دقيقة
+
+
+def runtime() -> dict:
+    try:
+        return json.loads(RUNTIME_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_runtime(data: dict) -> None:
+    RUNTIME_FILE.parent.mkdir(parents=True, exist_ok=True)
+    RUNTIME_FILE.write_text(json.dumps(data), encoding="utf-8")
+
+
 def set_status(item: dict, status: str, **extra) -> None:
     item["status"] = status
     item.setdefault("history", []).append([now().isoformat(timespec="seconds"), status])

@@ -1,14 +1,18 @@
 name: x2fb
 
+# تشغيل مستمر: مهمة واحدة تعمل ~٥ ساعات و٤٠ دقيقة تستمع لتلغرام لحظياً (انتظار طويل)،
+# تجلب من X كل ساعة، وتدفع السجل عند كل تغيير؛ ثم تطلق المهمة التالية بنفسها.
+# جدول cron احتياط فقط: يعيد تشغيل السلسلة إن انقطعت (جدول GitHub غير دقيق — يتأخر ساعات).
 on:
   schedule:
-    - cron: "2,32 * * * *"   # كل نصف ساعة: المواعيد تُختار على :00 و:30 فيُنشر بعدها بدقيقتين
+    - cron: "17 */2 * * *"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write   # دفع السجل
+  actions: write    # إطلاق المهمة التالية
 
-# دورة واحدة في كل لحظة: طابع الادّعاء في السجل يفترض ألا تتسابق دورتان
+# مهمة واحدة في كل لحظة: تلغرام يرفض مستمعَين معاً، وطابع الادّعاء يفترض ألا تتسابق دورتان
 concurrency:
   group: x2fb
   cancel-in-progress: false
@@ -16,16 +20,16 @@ concurrency:
 jobs:
   cycle:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 355
     steps:
-      # رأس الفرع لحظة التنفيذ، لا الـSHA المثبّت لحظة الإطلاق — وإلا قرأت الدورة المنتظرة سجلاً قديماً
+      # رأس الفرع لحظة التنفيذ، لا الـSHA المثبّت لحظة الإطلاق — وإلا قرأت المهمة المنتظرة سجلاً قديماً
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run cycle
+      - name: Run loop
         env:
           TWITTERAPI_IO_KEY: ${{ secrets.TWITTERAPI_IO_KEY }}
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
@@ -39,19 +43,12 @@ jobs:
           VETO_HOURS: ${{ vars.VETO_HOURS }}
           X_USERNAME: ${{ vars.X_USERNAME }}
           MAX_PER_DAY: ${{ vars.MAX_PER_DAY }}
-        run: python -m x2fb run
-      - name: Save ledger
-        if: always()
         run: |
           git config user.name "x2fb-bot"
           git config user.email "x2fb-bot@users.noreply.github.com"
-          [ -f state/ledger.json ] || exit 0
-          git add state/ledger.json
-          git diff --cached --quiet && exit 0
-          git commit -m "state: cycle $(date -u +%FT%TZ)"
-          for i in 1 2 3 4 5; do
-            git pull --rebase -X theirs origin "${{ github.ref_name }}" && git push && exit 0
-            sleep $((i * 5))
-          done
-          echo "::error::تعذّر حفظ السجل — حارس الصفحة يمنع النشر المكرر في الدورة التالية"
-          exit 1
+          python -m x2fb loop --minutes 340 --sync
+      - name: Relay to the next run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run x2fb.yml --ref "${{ github.ref_name }}" -R "${{ github.repository }}"

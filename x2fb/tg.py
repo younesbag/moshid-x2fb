@@ -62,7 +62,7 @@ def preview(item: dict) -> list[int]:
     return send(head + item["fb_text"] + rule, keyboard(item["id"]))
 
 
-def poll(offset: int) -> tuple[list[dict], int]:
+def poll(offset: int, wait: int = 0) -> tuple[list[dict], int]:
     """أحداث صاحب المحادثة وحده بترتيب وقوعها، والإزاحة الجديدة.
 
     {"kind": "now"|"at"|"no", "id": ..., "arg": "HHMM"}  ضغطة زر
@@ -71,7 +71,8 @@ def poll(offset: int) -> tuple[list[dict], int]:
     if not enabled():
         return [], offset
     r = request("GET", f"https://api.telegram.org/bot{config.TG_BOT_TOKEN}/getUpdates",
-                params={"offset": offset, "timeout": 0, "allowed_updates": '["callback_query","message"]'})
+                params={"offset": offset, "timeout": wait, "allowed_updates": '["callback_query","message"]'},
+                timeout=wait + 30)
     owner = str(config.TG_CHAT_ID)
     events = []
     for u in r.get("result", []):

@@ -2,10 +2,13 @@
 
   python -m x2fb check        فحص كل الاتصالات (لا ينشر شيئاً)
   python -m x2fb dry [--n 5]  معاينة تحويل أفضل منشوراتك الأخيرة في out/preview.md (لا ينشر ولا يغيّر السجل)
-  python -m x2fb run          دورة كاملة (تُشغَّل كل ساعة من GitHub Actions)
+  python -m x2fb run          دورة واحدة
+  python -m x2fb loop --sync  تشغيل مستمر (GitHub Actions): تلغرام لحظياً، X كل ساعة، السجل يُدفع عند كل تغيير
 """
 import argparse
+import subprocess
 import sys
+import time
 from datetime import timedelta, timezone
 
 from . import config, fb, gate, ledger, schedule, tg, xsrc
@@ -145,16 +148,21 @@ def _apply_events(state: dict, events: list[dict], now) -> bool:
     return changed
 
 
-def cycle() -> None:
+def cycle(wait: int = 0) -> None:
+    """دورة واحدة. wait>0 = انتظار طويل لتلغرام (وضع loop): الضغطة تُطبَّق لحظة وصولها."""
     state = ledger.load()
     items = state["items"]
     state.setdefault("baseline", {})
-    now = ledger.now()
+    # لحظة بدء الاستماع تُحفظ خارج السجل المودَع (لا كوميت كل دقيقة): مرجع «لحظة الضغط»
+    state["last_poll"] = ledger.runtime().get("last_poll", "")
+    poll_start = ledger.now()
 
     # ١) تلغرام: موافقات بأوقاتها، تغيير مواعيد، إلغاءات — بترتيب وقوعها
-    events, state["tg_offset"] = tg.poll(state.get("tg_offset", 0))
+    events, state["tg_offset"] = tg.poll(state.get("tg_offset", 0), wait)
+    now = ledger.now()
     changed = _apply_events(state, events, now)
-    state["last_poll"] = now.isoformat()
+    ledger.save_runtime({"last_poll": poll_start.isoformat()})
+    state.pop("last_poll", None)
     ledger.save(state)
 
     def age_h(it):
@@ -458,17 +466,53 @@ def check() -> int:
     return 0 if ok else 1
 
 
+def _git(*args: str) -> int:
+    return subprocess.run(["git", *args], cwd=config.ROOT, capture_output=True, text=True).returncode
+
+
+def _sync_ledger() -> None:
+    """يودِع السجل ويدفعه إن تغيّر. فشل الدفع لا يوقف الحلقة: حارس الصفحة يمنع أي نشر مكرر."""
+    rel = str(config.STATE_FILE.relative_to(config.ROOT)).replace("\\", "/")
+    _git("add", rel)
+    if _git("diff", "--cached", "--quiet") == 0:
+        return
+    _git("commit", "-q", "-m", f"state: {ledger.now().isoformat(timespec='seconds')}")
+    for attempt in range(4):
+        if _git("pull", "-q", "--rebase", "-X", "theirs") == 0 and _git("push", "-q") == 0:
+            return
+        time.sleep(5 * (attempt + 1))
+    print("تعذّر دفع السجل — يُعاد في التغيير التالي")
+
+
+def loop(minutes: float, sync: bool) -> None:
+    """تشغيل مستمر: يستمع لتلغرام بانتظار طويل فتُطبَّق ضغطتك خلال ثوانٍ، والجلب من X مرة في الساعة."""
+    end = time.time() + minutes * 60
+    while time.time() < end:
+        try:
+            cycle(wait=min(50, max(1, int(end - time.time()))))
+        except Exception as e:  # خطأ دورة واحدة لا يُسقط الحلقة
+            print(f"خطأ في دورة: {str(e)[:300]}")
+            time.sleep(15)
+        if sync:
+            _sync_ledger()
+
+
 def cli() -> None:
     ap = argparse.ArgumentParser(prog="x2fb")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("run")
     sub.add_parser("check")
+    lp = sub.add_parser("loop")
+    lp.add_argument("--minutes", type=float, default=340)
+    lp.add_argument("--sync", action="store_true", help="احفظ السجل في المستودع (git) كلما تغيّر")
     d = sub.add_parser("dry")
     d.add_argument("--n", type=int, default=5)
     d.add_argument("--min-age", type=float, default=config.MIN_AGE_HOURS)
     a = ap.parse_args()
     if a.cmd == "run":
         cycle()
+    elif a.cmd == "loop":
+        loop(a.minutes, a.sync)
     elif a.cmd == "dry":
         dry(a.n, a.min_age)
     else:
