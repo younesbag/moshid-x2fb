@@ -150,6 +150,8 @@ def _apply_events(state: dict, events: list[dict], now) -> bool:
         if not it:
             continue
         first = it.get("fb_text", "").strip().splitlines()[0][:40] if it.get("fb_text") else it["x_url"]
+        if it["status"] == "expired" and it.get("fb_text"):
+            ledger.set_status(it, "pending", reason="أُعيد بطلبك من تلغرام")
         new_text = None
         if ev["kind"] == "edit" and it["status"] in ("pending", "drafted", "approved", "scheduled"):
             if it["status"] == "scheduled" and it.get("publish_at") and now >= parse(it["publish_at"]):
@@ -284,8 +286,11 @@ def _intake(state: dict, now, age_h) -> None:
         age = age_h(it)
         # ما لم توافق عليه خلال يومين بعد نافذة النقل صار قديماً. الموافَق عليه لا يسقط بالعمر
         # (حتى ٣٠ يوماً) لأنك اخترت موعده بنفسك
-        if it["status"] in ("candidate", "pending") and age > config.MAX_AGE_HOURS + 48:
+        if it["status"] == "candidate" and age > config.MAX_AGE_HOURS + 48:
             ledger.set_status(it, "expired", reason="تجاوز مهلة النقل")
+            continue
+        if it["status"] == "pending" and age > (30 * 24 if it.get("previewed") else config.MAX_AGE_HOURS + 48):
+            ledger.set_status(it, "expired", reason="بقي بلا قرار أكثر من ٣٠ يوماً" if it.get("previewed") else "تجاوز مهلة النقل")
             continue
         if it["status"] == "approved" and age > 30 * 24:
             ledger.set_status(it, "expired", reason="بقي مجدولاً أكثر من ٣٠ يوماً")

@@ -172,6 +172,17 @@ class Schedule(unittest.TestCase):
         dele.assert_called_once_with("p1")
         self.assertEqual(st["items"]["a"]["status"], "pending")
 
+    def test_expired_draft_can_still_be_scheduled(self):
+        from x2fb import tg
+        st = self._state()
+        st["items"]["a"]["status"] = "expired"
+        st["items"]["b"].update(status="expired", fb_text="")  # لم يُصغ قط: لا يُعاد
+        with mock.patch.object(tg, "notify"):
+            main._apply_events(st, [{"kind": "at", "id": "a", "arg": "2000"},
+                                    {"kind": "now", "id": "b", "arg": ""}], self.now)
+        self.assertEqual(st["items"]["a"]["status"], "approved")
+        self.assertEqual(st["items"]["b"]["status"], "expired")
+
     def test_short_time_reply_is_schedule_not_edit(self):
         st = self._state()
         rev, _, _ = self._edit(st, "19:45")
