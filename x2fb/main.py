@@ -12,7 +12,7 @@ import time
 from datetime import timedelta, timezone
 
 from . import config, fb, gate, ledger, schedule, tg, xsrc
-from .transform import transform
+from .transform import revise, transform
 
 
 
@@ -91,6 +91,34 @@ STATUS_AR = {"published": "نُشر فعلاً", "vetoed": "ملغى", "expired"
              "uncertain": "نتيجة نشره غير مؤكدة", "publishing": "قيد النشر", "skipped": "متخطّى", "blocked": "موقوف"}
 
 
+EDIT_VERBATIM = ("نص:", "نص جديد:", "النص:")
+
+
+def _edited_text(it: dict, request_text: str) -> str | None:
+    """«نص: …» = استبدال حرفي بنصك؛ أي رد آخر = تعليمة يطبّقها وكيل التحويل. يعيد None عند الفشل."""
+    body = it["fb_text"]
+    sig = config.SIGNATURE
+    if body.rstrip().endswith(sig):
+        body = body.rstrip()[: -len(sig)].rstrip()
+    req = request_text.strip()
+    verbatim = next((req[len(p):].strip() for p in EDIT_VERBATIM if req.startswith(p)), None)
+    if verbatim is not None:
+        text, how = verbatim, "استبدال حرفي"
+    else:
+        try:
+            text, how = revise(body, req).get("text", "").strip(), "تعليمة"
+        except Exception as e:
+            tg.notify(f"🔴 تعذّر تطبيق التعديل الآن ({str(e)[:150]}). أعد إرسال طلبك بعد قليل.")
+            return None
+    media = bool(it.get("video_url")) or bool(it.get("use_media"))
+    problems = gate.check(text, media)
+    if problems:
+        tg.notify(f"⚠️ لم أطبّق التعديل ({how}) لأن النص الناتج لا يجتاز الفحص: {'، '.join(problems)}.\n"
+                  "بقيت المسودة كما كانت. جرّب صياغة أخرى أو أرسل «نص: …» بالنص الكامل.")
+        return None
+    return text + "\n\n" + sig
+
+
 def _apply_events(state: dict, events: list[dict], now) -> bool:
     """يطبّق ضغطات وردود تلغرام على السجل. يعيد True إن وجب إرسال الجدول.
 
@@ -109,10 +137,11 @@ def _apply_events(state: dict, events: list[dict], now) -> bool:
                 changed = True  # رسالة حرة: يُرسل الجدول الحالي جواباً
                 continue
             ref = ledger.datetime.fromtimestamp(ev["date"], timezone.utc) if ev.get("date") else press_ref
-            at = schedule.parse(ev["text"], ref)
+            text = (ev.get("text") or "").strip()
+            # رد قصير فيه وقت = موعد؛ أي رد آخر على المعاينة = تعديل للمسودة
+            at = schedule.parse(text, ref) if len(text) <= 25 else None
             if at is None:
-                tg.notify("لم أفهم الوقت. اكتب مثل: 19:45 أو «8:30 م» أو «غدا 08:00» (بتوقيت مكة).")
-                continue
+                ev = {**ev, "kind": "edit"}
         else:
             it = items.get(ev["id"])
             at = None
@@ -121,6 +150,15 @@ def _apply_events(state: dict, events: list[dict], now) -> bool:
         if not it:
             continue
         first = it.get("fb_text", "").strip().splitlines()[0][:40] if it.get("fb_text") else it["x_url"]
+        new_text = None
+        if ev["kind"] == "edit" and it["status"] in ("pending", "drafted", "approved", "scheduled"):
+            if it["status"] == "scheduled" and it.get("publish_at") and now >= parse(it["publish_at"]):
+                tg.notify(f"هذا المنشور حان موعده ونُشر، فلا يمكن تعديله من هنا:\n{first}")
+                continue
+            # النص الجديد يُحسب ويُفحص أولاً — لا يُسحب منشور مجدول من فيسبوك ثم يفشل تعديله
+            new_text = _edited_text(it, ev["text"])
+            if new_text is None:
+                continue
         if it["status"] == "scheduled" and it.get("publish_at") and now >= parse(it["publish_at"]):
             # فات موعده: فيسبوك نشره (أو يكاد). السحب الآن يحذف منشوراً حياً — لا نلمسه
             tg.notify(f"هذا المنشور حان موعده ونُشر، فلا يمكن تغييره من هنا:\n{first}")
@@ -139,6 +177,13 @@ def _apply_events(state: dict, events: list[dict], now) -> bool:
             it["fb_id"] = ""
         if ev["kind"] == "no":
             ledger.set_status(it, "vetoed")
+        elif ev["kind"] == "edit":
+            # النص تغيّر: يعود للمراجعة بمعاينة جديدة ويُختار وقته من جديد — لا يُنشر نص لم تره كاملاً
+            it["fb_text"] = new_text
+            it["publish_at"] = ""
+            it["previewed"] = None
+            ledger.set_status(it, "pending", edited_at=now.isoformat())
+            tg.notify(f"✏️ عُدّلت المسودة. المعاينة الجديدة تصلك الآن — اختر وقتها من أزرارها:\n{new_text.splitlines()[0][:50]}")
         else:  # now | at | text: موافقة، أو تغيير موعد منشور موافَق عليه
             ledger.set_status(it, "approved", approved_at=it.get("approved_at") or now.isoformat())
             it["publish_at"] = at.isoformat() if at else ""
@@ -186,7 +231,8 @@ def cycle(wait: int = 0) -> None:
     if tg.enabled():
         for it in [i for i in items.values() if i["status"] == "pending" and not i.get("previewed")][:3]:
             try:
-                it["preview_msgs"] = tg.preview(it)
+                # تُضاف معرّفات المعاينة الجديدة إلى القديمة: الرد على أي معاينة سابقة يبقى منسوباً لمنشورها
+                it["preview_msgs"] = (it.get("preview_msgs") or []) + tg.preview(it)
             except Exception as e:
                 print(f"تعذّرت المعاينة: {str(e)[:200]}")
                 break

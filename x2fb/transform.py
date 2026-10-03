@@ -99,3 +99,24 @@ def transform(chain: list[dict]) -> dict:
     out.setdefault("text", "")
     out.setdefault("use_media", False)
     return out
+
+
+REVISE_RULES = """
+
+## مهمة الآن: تعديل مسودة بطلب يونس
+ستصلك مسودة منشور فيسبوك وطلب تعديل كتبه يونس بنفسه.
+- طبّق المطلوب فقط، ولا تغيّر ما لم يطلب تغييره.
+- كل قواعد الصوت والإزالة أعلاه سارية (لا روابط، لا @، لا #، لا Markdown).
+- لا تكتب التوقيع؛ يُضاف آلياً.
+أعد JSON فقط: {"text": "المسودة بعد التعديل", "notes": "ما غيّرته بسطر"}
+"""
+
+
+def revise(draft: str, instruction: str) -> dict:
+    """يعدّل مسودة قائمة بتعليمة مكتوبة من تلغرام (مثل «اجعله أقصر» أو «احذف الفقرة الأخيرة»)."""
+    system = config.CONSTITUTION.read_text(encoding="utf-8") + REVISE_RULES
+    user = f"المسودة الحالية:\n\n{draft}\n\n────────\nطلب التعديل:\n{instruction}"
+    provider = {"gemini": _gemini, "anthropic": _anthropic}.get(config.TRANSFORMER, _claude)
+    out = _extract_json(provider(system, user))
+    out.setdefault("text", "")
+    return out

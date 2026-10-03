@@ -133,13 +133,50 @@ class Schedule(unittest.TestCase):
         self.assertIn("اليوم 21:30", text)
         self.assertIn("اليوم 22:45", text)
 
-    def test_bad_time_reply_changes_nothing(self):
-        from x2fb import tg
+    def _edit(self, st, text, revise_out=None, delete=None):
+        from x2fb import fb, tg
+        with mock.patch.object(main, "revise", return_value=revise_out or {"text": ""}) as rev, \
+             mock.patch.object(fb, "delete", side_effect=delete) as dele, mock.patch.object(tg, "notify") as note:
+            main._apply_events(st, [{"kind": "text", "text": text, "reply_to": 500, "date": None}], self.now)
+        return rev, dele, note
+
+    def test_edit_by_instruction_resets_to_review(self):
         st = self._state()
-        with mock.patch.object(tg, "notify") as note:
-            main._apply_events(st, [{"kind": "text", "text": "بعدين", "reply_to": 500}], self.now)
-        self.assertEqual(st["items"]["a"]["status"], "pending")
+        st["items"]["a"]["fb_text"] = "نص قديم طويل بما يكفي لاجتياز الفحص. " * 4 + "\n\n— يونس"
+        new = "نص جديد أقصر لكنه يجتاز الفحص بلا مشاكل ويحمل الفكرة كاملة. " * 3
+        rev, _, _ = self._edit(st, "اجعله أقصر واحذف آخر فقرة", {"text": new})
+        self.assertNotIn("— يونس", rev.call_args.args[0])  # التوقيع لا يُرسل للنموذج
+        it = st["items"]["a"]
+        self.assertEqual(it["fb_text"], new.strip() + "\n\n— يونس")
+        self.assertEqual((it["status"], it["publish_at"], it["previewed"]), ("pending", "", None))
+
+    def test_edit_verbatim_skips_model(self):
+        st = self._state()
+        mine = "هذا نصي الكامل كما أريده تماماً، بلا روابط ولا إشارات، وفيه فكرة واحدة واضحة ومفيدة. " * 2
+        rev, _, _ = self._edit(st, "نص: " + mine)
+        rev.assert_not_called()
+        self.assertEqual(st["items"]["a"]["fb_text"], mine.strip() + "\n\n— يونس")
+
+    def test_failed_edit_keeps_draft_and_scheduled_post(self):
+        st = self._state()
+        st["items"]["a"].update(status="scheduled", fb_id="p1", approved_at="x", publish_at="2026-10-03T17:00:00+00:00")
+        _, dele, note = self._edit(st, "أضف رابط الموقع", {"text": "شوف https://moshid.com " * 10})
+        dele.assert_not_called()  # الفحص رسب: لا يُسحب المنشور المجدول من فيسبوك
+        self.assertEqual((st["items"]["a"]["status"], st["items"]["a"]["fb_text"]), ("scheduled", "أول"))
         note.assert_called_once()
+
+    def test_edit_of_scheduled_withdraws_then_resets(self):
+        st = self._state()
+        st["items"]["a"].update(status="scheduled", fb_id="p1", approved_at="x", publish_at="2026-10-03T17:00:00+00:00")
+        _, dele, _ = self._edit(st, "نص: " + "صياغة جديدة كاملة تجتاز الفحص وتشرح الفكرة بوضوح ودقة. " * 3)
+        dele.assert_called_once_with("p1")
+        self.assertEqual(st["items"]["a"]["status"], "pending")
+
+    def test_short_time_reply_is_schedule_not_edit(self):
+        st = self._state()
+        rev, _, _ = self._edit(st, "19:45")
+        rev.assert_not_called()
+        self.assertEqual(st["items"]["a"]["status"], "approved")
 
     def test_only_due_items_publish_and_never_two_in_a_cycle(self):
         from datetime import timedelta
