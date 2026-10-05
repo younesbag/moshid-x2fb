@@ -431,6 +431,11 @@ def _publish_due(state: dict, now) -> None:
     items = state["items"]
     parse = ledger.datetime.fromisoformat
 
+    # قاطع: ميتا أوقفت حساب المطوّر/التطبيق ← لا طلبات إليها ٦ ساعات. الإلحاح على API محجوب
+    # يُقرأ «نشاطاً غير طبيعي» إضافياً على حساب مقيّد (أُوقف مرة في 05/10)
+    if state.get("fb_pause_until") and now < parse(state["fb_pause_until"]):
+        return
+
     # ما سُجّل عند فيسبوك وفات موعده: نتحقق أنه نُشر فعلاً قبل أن نقول «نُشر»
     for it in items.values():
         if it["status"] != "scheduled" or not it.get("publish_at") or now < parse(it["publish_at"]) + timedelta(minutes=5):
@@ -469,6 +474,12 @@ def _publish_due(state: dict, now) -> None:
         posts = fb.recent_posts()
     except Exception as e:
         print(f"تعذّر قراءة الصفحة قبل النشر — لا نشر هذه الدورة: {str(e)[:200]}")
+        if "Cannot call API" in str(e) or '"code":190' in str(e):
+            state["fb_pause_until"] = (now + timedelta(hours=6)).isoformat()
+            ledger.save(state)
+            tg.notify("🔴 ميتا ترفض طلبات التطبيق الآن (غالباً «مطلوب تأكيد الحساب» في developers.facebook.com).\n"
+                      "أوقفتُ كل طلب إلى فيسبوك ٦ ساعات. افتح developers.facebook.com وأكمل التأكيد إن طُلب، "
+                      "ومواعيدك المختارة تبقى محفوظة.")
         return
 
     def cap_reached(when) -> bool:
