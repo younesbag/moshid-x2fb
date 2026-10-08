@@ -2369,7 +2369,7 @@
    "x_url": "https://x.com/younesbag1/status/2107476165409857795",
    "created": "2026-10-06T14:20:47+00:00",
    "text": "نفس البرومبت، نفس المهمة، نفس اوبوس 5.5\n\nغيرت Skill واحدة فقط... والفرق كأنه مصمم مختلف تماما...\n\nبنيت داخل مشيد Skill هدفها تخلي الـAI ما يبني مجرد صفحة \"مرتبة\" بس، بل واجهة فعلا استثنائية...\n\nقارنتها بـTaste Skill المنتشرة على GitHub، والنتيجة قدامك بالفيديو...\n\nوهذي مجرد قطعة من اللي نبنيه داخل مشيد\n\nإذا تبي تجربها مجانا،  تكفيني تكتب\"تصميم\" و أرسل لك👇",
-   "score": 897,
+   "score": 899,
    "photos": [],
    "video": true,
    "quote": false,
@@ -2477,7 +2477,7 @@
    "x_url": "https://x.com/younesbag1/status/2107797587504042277",
    "created": "2026-10-07T11:38:00+00:00",
    "text": "قبل ما ترمي فلوسك على SSD جديد..وقف🚨 خل Claude يطلع لك مين سرق مساحة جهازك\n\nمو بس يمسح الكاش\nخله يطلع:\n → أكبر الملفات والمجلدات\n→ caches وbuilds وبقايا تحديثات قابلة للحذف\n→ ملفات سحابية ممكن حذفها يورطك\n→ وش آمن ينظفه الآن ووش يحتاج موافقتك\n\nولا تقل له: نظف كل شي\n\nخله: يفحص → ينظف الآمن → يستأذنك بالباقي → يكمل → ويقولك كم جيغا رجعت فعليا.\nهذه التعليمة احفضها👇:\n\nYou are a system maintenance expert. Analyze this computer and free up as much disk space as safely possible while preserving personal files, installed applications, settings, and system stability.\n\nFirst, identify the operating system, disk capacities, and available space. Analyze storage usage to find the largest cleanup opportunities. Never assume a file is unnecessary simply because it is large or old.\n\nAutomatically perform only low-risk cleanup: unused temporary files, safely regenerable caches, and update leftovers that official system tools confirm are safe to remove. Prefer built-in cleanup tools, skip locked files and anything whose purpose is unclear, and work incrementally, checking results after each stage.\n\nDo not delete or modify personal files, Downloads, Recycle Bin/Trash contents, backups, restore points, application data, passwords, cookies, or login sessions without my approval. Do not uninstall applications, manually delete system files, or disable system features to reclaim space. Treat cloud-synced folders carefully: local deletion may also delete cloud copies.\n\nIf additional opportunities require my decision, finish all safe cleanup first. Then present one concise approval list with the items, exact paths, sizes, and consequences of removal. Avoid broad deletion commands, use elevated privileges only when clearly necessary, and never bypass access controls.\n\nFinally, report free space before and after, the actual space recovered, what was cleaned, and the remaining opportunities. If you cannot execute actions on this computer, state that clearly and provide OS-specific instructions instead of claiming the cleanup was completed.\n\nيمكن بالنهاية تحتاج SSD أكبر فعلا.\nممتاز..\nبس لا تدفع قبل ما تعرف إن التخزين هو المشكلة أصلا",
-   "score": 179,
+   "score": 181,
    "photos": [],
    "video": false,
    "quote": false,
@@ -2513,7 +2513,7 @@
    "x_url": "https://x.com/younesbag1/status/2107908181829759074",
    "created": "2026-10-07T18:57:28+00:00",
    "text": "قبل ما توظف أحد يسوي لك محتوى… شوف وش صار Claude Code يقدر يبني لك.\n\nهذا المقال تقريباً كل اللي تحتاجه عشان تبني النظام بنفسك: 12 مرحلة، وكل مرحلة برومبت جاهز 👇 https://t.co/fpuLjj6266",
-   "score": 21,
+   "score": 24,
    "photos": [],
    "video": false,
    "quote": false,
@@ -2592,8 +2592,8 @@
   "2106996854709981450": 9,
   "2107368010969493777": 466,
   "2107435488323989782": 54,
-  "2107476165409857795": 897,
+  "2107476165409857795": 899,
   "2107543528876524010": 77
  },
- "last_fetch": "2026-10-07T23:29:52.999307+00:00"
+ "last_fetch": "2026-10-08T00:20:28.495765+00:00"
 }
