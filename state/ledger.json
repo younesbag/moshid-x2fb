@@ -2501,13 +2501,25 @@
    "video": false,
    "quote": false,
    "article": false,
-   "status": "seen",
+   "status": "blocked",
    "history": [
     [
      "2026-10-07T11:43:11+00:00",
      "seen"
+    ],
+    [
+     "2026-10-08T12:06:59+00:00",
+     "candidate"
+    ],
+    [
+     "2026-10-08T12:07:18+00:00",
+     "blocked"
     ]
-   ]
+   ],
+   "percentile": 17.857142857142858,
+   "video_url": "",
+   "reason": "البوابة: العربية أقل من ربع النص",
+   "fb_text": "قبل ما ترمي فلوسك على SSD جديد.. وقف 🚨 خل Claude يطلع لك مين سرق مساحة جهازك\n\nمو بس يمسح الكاش\nخله يطلع:\n→ أكبر الملفات والمجلدات\n→ caches وbuilds وبقايا تحديثات قابلة للحذف\n→ ملفات سحابية ممكن حذفها يورطك\n→ وش آمن ينظفه الآن ووش يحتاج موافقتك\n\nولا تقل له: نظف كل شي\nخله: يفحص → ينظف الآمن → يستأذنك بالباقي → يكمل → ويقولك كم جيغا رجعت فعليا.\n\nانسخ هذه التعليمة:\n\nYou are a system maintenance expert. Analyze this computer and free up as much disk space as safely possible while preserving personal files, installed applications, settings, and system stability.\n\nFirst, identify the operating system, disk capacities, and available space. Analyze storage usage to find the largest cleanup opportunities. Never assume a file is unnecessary simply because it is large or old.\n\nAutomatically perform only low-risk cleanup: unused temporary files, safely regenerable caches, and update leftovers that official system tools confirm are safe to remove. Prefer built-in cleanup tools, skip locked files and anything whose purpose is unclear, and work incrementally, checking results after each stage.\n\nDo not delete or modify personal files, Downloads, Recycle Bin/Trash contents, backups, restore points, application data, passwords, cookies, or login sessions without my approval. Do not uninstall applications, manually delete system files, or disable system features to reclaim space. Treat cloud-synced folders carefully: local deletion may also delete cloud copies.\n\nIf additional opportunities require my decision, finish all safe cleanup first. Then present one concise approval list with the items, exact paths, sizes, and consequences of removal. Avoid broad deletion commands, use elevated privileges only when clearly necessary, and never bypass access controls.\n\nFinally, report free space before and after, the actual space recovered, what was cleaned, and the remaining opportunities. If you cannot execute actions on this computer, state that clearly and provide OS-specific instructions instead of claiming the cleanup was completed.\n\nيمكن بالنهاية تحتاج SSD أكبر فعلا.\nممتاز..\nبس لا تدفع قبل ما تعرف إن التخزين هو المشكلة أصلا"
   },
   "2107869650541531138": {
    "id": "2107869650541531138",
@@ -2568,7 +2580,7 @@
    "x_url": "https://x.com/younesbag1/status/2108130108813050305",
    "created": "2026-10-08T09:39:19+00:00",
    "text": "أغلب فيديوهات الـ AI تنرفض مو لأن الأداة ضعيفة، لكن لأن الفكرة ما كانت تستاهل من البداية.\n\nهذا النظام اللي أستخدمه عشان أفلتر الفكرة قبل التوليد، مع 13 برومبت جاهز 👇",
-   "score": 9,
+   "score": 11,
    "photos": [],
    "video": false,
    "quote": true,
@@ -2586,7 +2598,7 @@
    "x_url": "https://x.com/younesbag1/status/2108148769246384354",
    "created": "2026-10-08T10:53:28+00:00",
    "text": "بنيت لنفسي محلل لاكس كامل بالـ AI، يقولي بالأرقام إيش يرفع وصولي وإيش يقتله، واليوم أشاركه معكم كـ template مجاني 👇\n\nالبوت كل يوم على جروك بوت:\n• يحلل كل بوستاتك ويطلع لك الأنماط اللي تنجح فعلا\n• يقارنك بأكبر الحسابات في نيشك، ويقولك إذا وصولك فعلا ضعيف أو لا\n• يعطيك كل صباح 3 أفكار بوستات من ترندات اليوم، مع الهوك\n• يجيب لك 5 فرص ردود على حسابات كبيرة، مع مسودة رد جاهزة\n• يتابع نمو متابعينك ويرسل لك تقرير أسبوعي ومراقبة للمنافسين\n\nوما ينشر شي بدالك أبدا، أنت اللي تنشر\nhttps://t.co/v0Ppf9Mf4j",
-   "score": 5,
+   "score": 11,
    "photos": [
     "https://pbs.twimg.com/media/HUGmIWSbwAAoQPf.jpg?name=large"
    ],
@@ -2626,7 +2638,6 @@
   "2103061327652814945": 3,
   "2103025882927698025": 59,
   "2103019998730178927": 72,
-  "2102994622419231018": 40,
   "2103794074272829501": 24,
   "2103786715915960704": 62,
   "2103758676452684186": 5,
@@ -2669,7 +2680,8 @@
   "2107435488323989782": 56,
   "2107476165409857795": 922,
   "2107543528876524010": 81,
-  "2107750739028451641": 42
+  "2107750739028451641": 42,
+  "2107797587504042277": 203
  },
- "last_fetch": "2026-10-08T11:16:37.465727+00:00"
+ "last_fetch": "2026-10-08T12:06:58.775393+00:00"
 }
