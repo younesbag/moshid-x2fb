@@ -70,8 +70,8 @@ def preview(item: dict) -> list[int]:
               else (f"{len(item.get('photos', []))} صورة" if item.get("use_media") else "لا شيء"))
     head = (f"🟡 منشور مقترح لصفحة فيسبوك\n"
             f"من: {item['x_url']}\n"
-            f"أداؤه على X: {item['score']:.0f} نقطة (ضمن الأعلى {item.get('percentile', 0):.0f}٪ من منشوراتك)\n"
             f"المرفق: {attach}\n"
+            + (f"⚠️ انتبه: {'، '.join(item['warnings'])}\n" if item.get("warnings") else "") +
             f"────────\n")
     rule = ("\n────────\nاختر وقت النشر بتوقيت مكة من الأزرار، أو رُدّ على هذه الرسالة بوقت تكتبه "
             "(مثل 19:45 أو «8:30 م» أو «غدا 08:00»). لن يُنشر بلا اختيارك، ويمكنك تغيير الوقت أو الإلغاء ما دام لم يُنشر."

@@ -39,9 +39,6 @@ def _percentile(baseline: dict, s: float) -> float:
 
 def draft(item: dict, tweet: dict) -> None:
     """تحويل + بوابة. يغيّر حالة البند فقط."""
-    if item["article"]:
-        ledger.set_status(item, "skipped", reason="مقال X طويل")
-        return
     chain = xsrc.thread_chain(tweet)
     video = xsrc.video_url(chain)
     if xsrc.has_video(chain) and not video:
@@ -50,18 +47,12 @@ def draft(item: dict, tweet: dict) -> None:
     item["photos"] = xsrc.photos(chain)
     item["video_url"] = video
     out = transform(chain)
-    if out.get("decision") != "publish":
-        ledger.set_status(item, "skipped", reason=out.get("skip_reason", "قرار النموذج"))
-        return
-    text = out["text"].strip()
+    text = (out.get("text") or "").strip() or "\n\n".join(t.get("text", "") for t in chain).strip()
     # الفيديو يُنقل دائماً مع منشوره؛ الصور بقرار النموذج. والفيديو يغني عن الصور
     use_media = bool(out.get("use_media")) and bool(item["photos"]) and not video
     problems = gate.check(text, use_media or bool(video))
-    if problems:
-        ledger.set_status(item, "blocked", reason="البوابة: " + "، ".join(problems), fb_text=text)
-        return
     ledger.set_status(item, "drafted", fb_text=text + "\n\n" + config.SIGNATURE,
-                      use_media=use_media, notes=out.get("notes", ""),
+                      use_media=use_media, notes=out.get("notes", ""), warnings=problems,
                       thread_len=len(chain))
 
 
@@ -360,20 +351,19 @@ def _intake(state: dict, now, age_h) -> None:
         if it["status"] == "seen" and age >= config.MIN_AGE_HOURS:
             if age > config.MAX_AGE_HOURS:
                 ledger.set_status(it, "expired")
-            elif it["score"] >= thr:
+            else:  # لا عتبة: كل منشور مرشح والقرار لك في تلغرام
                 ledger.set_status(it, "candidate", percentile=_percentile(baseline, it["score"]))
-            else:
-                ledger.set_status(it, "low")
     # خط الأساس: آخر ٦٠ منشوراً فقط
     for old in sorted(baseline, key=lambda k: items.get(k, {}).get("created", ""))[:-60]:
         baseline.pop(old, None)
     ledger.save(state)
 
-    # صياغة مرشح واحد في كل جلب (الأعلى أداءً)
-    cands = sorted((i for i in items.values() if i["status"] == "candidate"), key=lambda i: -i["score"])
-    if not cands:
-        return
-    it = cands[0]
+    # صياغة كل المرشحين بترتيب نشرهم على X (لا واحد في كل جلب: كل منشوراتك تصلك)
+    for it in sorted((i for i in items.values() if i["status"] == "candidate"), key=lambda i: i["created"]):
+        _draft_one(state, it, tweets)
+
+
+def _draft_one(state: dict, it: dict, tweets: dict) -> None:
     tw = tweets.get(it["id"])
     if tw is None:
         it.setdefault("errors", []).append("تعذّر جلب المنشور بمعرّفه")

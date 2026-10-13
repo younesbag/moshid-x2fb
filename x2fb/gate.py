@@ -2,7 +2,7 @@
 import re
 
 CHECKS = [
-    ("رابط", re.compile(r"https?://|www\.|t\.co/", re.I)),
+    ("رابط t.co مختصر (لا يعمل خارج X)", re.compile(r"t\.co/", re.I)),
     ("إشارة @", re.compile(r"(?<![\w.])@\w+")),
     ("هاشتاق", re.compile(r"(?<!\w)#[\w؀-ۿ]+")),
     ("أثر X", re.compile(r"ثريد|🧵|كمل الثريد|تابعني|ريتويت|رتويت|\bRT\b|احفظ التغريدة|الصورة تستاهل تنسرق|^\s*\d+\s*/\s*\d*\s*$", re.M)),

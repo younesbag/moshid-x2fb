@@ -326,3 +326,29 @@ class Video(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NoFilter(unittest.TestCase):
+    """أمر 13/10: كل منشور يصل تلغرام — بلا عتبة ولا تخطٍّ ولا حجب بوابة."""
+
+    def test_every_tweet_drafted_with_link(self):
+        from datetime import datetime, timezone
+        from x2fb import xsrc, tg
+        tw = [{"id": str(n), "text": f"منشور رقم {n} https://example.com", "createdAt": "x"} for n in (1, 2)]
+        state = {"items": {}, "baseline": {str(k): 1000 for k in range(100, 160)}}
+        out = {"decision": "skip", "text": "نص قصير https://example.com", "use_media": False}
+        with mock.patch.object(xsrc, "latest_originals", return_value=tw), \
+             mock.patch.object(xsrc, "score", return_value=1), \
+             mock.patch.object(main, "_item_from", side_effect=lambda t: {"id": t["id"], "x_url": "u", "created": "2026-10-13T00:00:00+00:00", "text": t["text"], "score": 1, "photos": [], "video": False, "quote": False, "article": True, "history": []}), \
+             mock.patch.object(xsrc, "thread_chain", side_effect=lambda t: [t]), \
+             mock.patch.object(xsrc, "video_url", return_value=None), \
+             mock.patch.object(xsrc, "has_video", return_value=False), \
+             mock.patch.object(xsrc, "photos", return_value=[]), \
+             mock.patch.object(main, "transform", return_value=out), \
+             mock.patch.object(main.ledger, "save"), mock.patch.object(tg, "notify"):
+            main._intake(state, datetime(2026, 10, 13, 1, tzinfo=timezone.utc), lambda it: 1.0)
+        for k in ("1", "2"):
+            it = state["items"][k]
+            self.assertEqual(it["status"], "pending" if main.config.MODE == "approval" else "approved")
+            self.assertIn("https://example.com", it["fb_text"])
+            self.assertIn("قصير جداً", it["warnings"])

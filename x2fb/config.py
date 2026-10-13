@@ -51,7 +51,7 @@ GEMINI_MODEL = env("GEMINI_MODEL", "gemini-3.1-pro-preview")
 # approval: لا يُنشر شيء بلا ضغطة «نشر» | veto: يُنشر بعد المهلة إن لم تلغِه | auto: بلا مراجعة
 MODE = env("MODE", "approval")
 VETO_HOURS = float(env("VETO_HOURS", "3"))
-MIN_AGE_HOURS = float(env("MIN_AGE_HOURS", "24"))   # نحكم على الأداء بعد يوم
+MIN_AGE_HOURS = float(env("MIN_AGE_HOURS", "0"))    # لا انتظار: كل منشور يصلك فور جلبه (أمر 13/10)
 MAX_AGE_HOURS = float(env("MAX_AGE_HOURS", "120"))  # لا ننقل ما فات عليه أكثر من ٥ أيام
 TOP_SHARE = float(env("TOP_SHARE", "0.35"))         # أعلى ٣٥٪ من منشوراتك أداءً
 MAX_PER_DAY = int(env("MAX_PER_DAY", "8"))  # صمام أمان فقط — العدد الفعلي يتبع ما توافق عليه
