@@ -3566,7 +3566,7 @@
    "video": false,
    "quote": false,
    "article": false,
-   "status": "candidate",
+   "status": "failed",
    "history": [
     [
      "2026-10-29T08:00:14+00:00",
@@ -3575,14 +3575,20 @@
     [
      "2026-10-29T08:00:14+00:00",
      "candidate"
+    ],
+    [
+     "2026-10-29T09:41:11+00:00",
+     "failed"
     ]
    ],
    "percentile": 100.0,
    "video_url": "",
    "errors": [
     "HTTP Error 402: Payment Required",
+    "HTTP Error 402: Payment Required",
     "HTTP Error 402: Payment Required"
-   ]
+   ],
+   "reason": "فشل التحويل ٣ مرات"
   }
  },
  "tg_offset": 160478485,
@@ -3656,5 +3662,5 @@
   "2114680238534000722": 18,
   "2115711096724365733": 2
  },
- "last_fetch": "2026-10-29T08:50:40.161676+00:00"
+ "last_fetch": "2026-10-29T09:41:07.974965+00:00"
 }
