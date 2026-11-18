@@ -3870,7 +3870,7 @@
    "x_url": "https://x.com/younesbag1/status/2122751903973154919",
    "created": "2026-11-17T18:01:07+00:00",
    "text": "كل مشروع أشتغل عليه يخلي Claude أذكى في المشروع اللي بعده.\n\nو مو لأن النموذج يتعلم فعليا\n\nبنيت له «دماغ» يحفظ قراراتي، تجاربي، أبحاثي والأخطاء اللي تعلمنا منها… ثم يقرأها قبل أي شغل جديد.\n\nيعني كل جلسة تبدأ من كل اللي تعلمناه سابقا، وأي درس جديد يرجع للدماغ بدل ما يضيع بانتهاء المحادثة.\n\nولو تبي تبني نفس النظام داخل Claude Code، هذا البرومبت:\n\nPrompt:\n\n“Build me a persistent second brain for Claude Code.\n\nThe goal is simple: every future session should benefit from decisions, experiments, research, and mistakes from previous sessions.\n\nCreate this structure:\n\n- brain/decisions\n- brain/results\n- brain/research\n- brain/lessons\n- brain/topics\n- brain/sources\n- brain/index.md\n\nRules:\n\n1. Before making any important recommendation or decision, search the brain for relevant previous decisions, results, lessons, and research.\n\n2. If previous evidence contradicts the new recommendation, explicitly surface the contradiction before proceeding.\n\n3. After any task that produces a meaningful decision, result, research finding, or reusable lesson, write it to the brain before marking the task complete.\n\n4. Never overwrite historical decisions. If a new decision replaces an old one, mark the old decision as superseded and link both directions.\n\n5. Every metric or number must include its date and source. Historical numbers are snapshots, not current truth.\n\n6. Raw sources must remain immutable.\n\n7. Avoid duplicated facts. Keep one canonical source and link to it from other files.\n\n8. Never store passwords, API keys, personal customer data, emails, phone numbers, or private identifiers.\n\n9. Maintain an index that summarizes the most important current knowledge and links to the underlying files.\n\n10. Periodically audit the brain for contradictions, stale numbers, orphaned files, and lessons that should become permanent rules.\n\nAlso update CLAUDE.md so Claude automatically:\n\n- reads the brain index at the start of every session\n- searches the brain before important decisions\n- writes new knowledge back before finishing relevant tasks\n\nUse Markdown files, human-readable links, and Git so the entire history is preserved.\n\nFinally, create the system, seed it with example templates, and test the read-before-decide / write-after-learn loop on one sample decision.\n\nDo not just explain the architecture. Build it.”",
-   "score": 406,
+   "score": 409,
    "photos": [],
    "video": false,
    "quote": false,
@@ -3958,6 +3958,54 @@
    "kb_state": "pending||",
    "previewed": "2026-11-18T11:49:11.373499+00:00",
    "deadline": "2026-11-18T14:49:11.373499+00:00"
+  },
+  "2123105459272118388": {
+   "id": "2123105459272118388",
+   "x_url": "https://x.com/younesbag1/status/2123105459272118388",
+   "created": "2026-11-18T17:26:01+00:00",
+   "text": "قبل شهرين ، https://t.co/e1ZMLjI54g كان شبه غير موجود على Google.\n\n8 ظهورات ونقرتان فقط في 28 يوم.\nآخر 28 يوم: 1,795 ظهور و108 نقرات.\n\nالأرقام مو ضخمة، لكن هذا بالضبط اللي يخلي التجربة مفيدة...\n\nهذه أهم الأشياء اللي سويناها👇:\n\n١. اقرأ أرقامك من المصدر نفسه.\nربطنا Search Console وBing، وأي رقم بلا مصدر ما نعتمد عليه.\n\n٢. راهن على صفحة واحدة.\nاختر صفحة ترتيبها بين 5 و20 وعندها ظهور.\n\nعندنا كانت \"/skills\"، واليوم تجيب 81 من 108 نقرة.\n\n٣. جاوب سؤال الباحث فوق الصفحة.\nأضفنا «ما هي مهارة Claude؟» و«كيف أركبها؟»، ورفعنا الزر من آخر الصفحة لأولها.\n\nهذا القسم نفسه صار Google يقتبس منه في نبذاته المولدة.\n\n٤. غيّر شي واحد وانتظر.\nتجربة واحدة لكل صفحة، ثم ننتظر بعد زيارة Google قبل الحكم.\n\nكذا تعرف وش اللي نفع فعلا.\n\n٥. اعرف وش الناس تبحث عنه فعلا.\nاشترينا حجم بحث 459 كلمة في السعودية بأقل من 10 سنتات.\n\n“claude skills” = 880 بحث شهريا\n«مهارات كلود» = 20\n\nفرق كهذا يغيّر المحتوى اللي تبنيه من الأساس.\n\n٦. لا تنشر وتنتظر.\nكل صفحة جديدة نطلب فهرستها في Google وBing وBrave نفس اليوم.\n\nمرة اكتشفنا 34 صفحة Bing ما كان يعرفها رغم نجاح IndexNow.\n\n٧. وسّع حول الشي اللي ينجح.\nلما تحركت \"/skills\"، بنينا حولها 22 صفحة مهارة ومحتوى لنفس الموضوع بدل نشر مقالات عشوائية.\n\n٨. خلّ وكيل SEO يكرر العملية أسبوعيا.\nعندي Agent في Claude Code يشتغل كل اثنين:\n\nيفحص الموقع والتجارب، يقيس ظهورنا في AI، يحدد التغيير التالي، ويكتب التقرير.\n\nواليوم ينفذ بنفسه داخل حدود واضحة بدل ما يعطيني توصيات وتبقى مركونة.\n\nالأسبوع الأخير وحده جاب 37 نقرة.\nالشهر الأول كامل جاب 13.\n\nما أحد يضمن لك ترتيب في Google.\n\nبس تقدر تبني نظام يعرف كل أسبوع:\nوش نغير؟ وش نفع؟ وش نجرب بعدها؟\n\nخلي كلمة «سيو» في الردود وأرسل لك النسخة اللي بدأت فيها مجانا.\n\nوالنسخة اللي أشغّلها اليوم موجودة داخل مُشَيِّد.",
+   "score": 3,
+   "photos": [
+    "https://pbs.twimg.com/media/HXbJKgSbsAAWBuW.jpg?name=large"
+   ],
+   "video": false,
+   "quote": false,
+   "article": false,
+   "status": "pending",
+   "history": [
+    [
+     "2026-11-18T17:43:04+00:00",
+     "seen"
+    ],
+    [
+     "2026-11-18T17:43:04+00:00",
+     "candidate"
+    ],
+    [
+     "2026-11-18T17:43:29+00:00",
+     "drafted"
+    ],
+    [
+     "2026-11-18T17:43:29+00:00",
+     "pending"
+    ]
+   ],
+   "percentile": 97.5,
+   "video_url": "",
+   "fb_text": "قبل شهرين، http://moshid.com كان شبه غير موجود على Google.\n\n8 ظهورات ونقرتان فقط في 28 يوم.\nآخر 28 يوم: 1,795 ظهور و108 نقرات.\n\nالأرقام مو ضخمة، لكن هذا بالضبط اللي يخلي التجربة مفيدة...\n\nهذه أهم الأشياء اللي سويناها:\n\n- اقرأ أرقامك من المصدر نفسه.\nربطنا Search Console وBing، وأي رقم بلا مصدر ما نعتمد عليه.\n\n- راهن على صفحة واحدة.\nاختر صفحة ترتيبها بين 5 و20 وعندها ظهور.\nعندنا كانت \"/skills\"، واليوم تجيب 81 من 108 نقرة.\n\n- جاوب سؤال الباحث فوق الصفحة.\nأضفنا «ما هي مهارة Claude؟» و«كيف أركبها؟»، ورفعنا الزر من آخر الصفحة لأولها.\nهذا القسم نفسه صار Google يقتبس منه في نبذاته المولدة.\n\n- غيّر شي واحد وانتظر.\nتجربة واحدة لكل صفحة، ثم ننتظر بعد زيارة Google قبل الحكم.\nكذا تعرف وش اللي نفع فعلا.\n\n- اعرف وش الناس تبحث عنه فعلا.\nاشترينا حجم بحث 459 كلمة في السعودية بأقل من 10 سنتات.\n“claude skills” = 880 بحث شهريا\n«مهارات كلود» = 20\nفرق كهذا يغيّر المحتوى اللي تبنيه من الأساس.\n\n- لا تنشر وتنتظر.\nكل صفحة جديدة نطلب فهرستها في Google وBing وBrave نفس اليوم.\nمرة اكتشفنا 34 صفحة Bing ما كان يعرفها رغم نجاح IndexNow.\n\n- وسّع حول الشي اللي ينجح.\nلما تحركت \"/skills\"، بنينا حولها 22 صفحة مهارة ومحتوى لنفس الموضوع بدل نشر مقالات عشوائية.\n\n- خلّ وكيل SEO يكرر العملية أسبوعيا.\nعندي Agent في Claude Code يشتغل كل اثنين:\nيفحص الموقع والتجارب، يقيس ظهورنا في AI، يحدد التغيير التالي، ويكتب التقرير.\nواليوم ينفذ بنفسه داخل حدود واضحة بدل ما يعطيني توصيات وتبقى مركونة.\n\nالأسبوع الأخير وحده جاب 37 نقرة.\nالشهر الأول كامل جاب 13.\n\nما أحد يضمن لك ترتيب في Google.\nبس تقدر تبني نظام يعرف كل أسبوع:\nوش نغير؟ وش نفع؟ وش نجرب بعدها؟\n\nالنسخة اللي أشغّلها اليوم موجودة داخل مُشَيِّد.\n\n— يونس",
+   "use_media": true,
+   "notes": "تم دمج الثريد في منشور واحد، استبدال الأرقام بقائمة نقطية، توسيع الرابط المختصر، وحذف طلب التعليق بكلمة 'سيو' لأنه أسلوب تفاعل خاص بمنصة X، مع الإبقاء على الإشارة لمُشَيِّد في النهاية.",
+   "warnings": [],
+   "thread_len": 1,
+   "preview_msgs": [
+    72
+   ],
+   "kb_msgs": [
+    72
+   ],
+   "kb_state": "pending||",
+   "previewed": "2026-11-18T17:43:03.321621+00:00",
+   "deadline": "2026-11-18T20:43:03.321621+00:00"
   }
  },
  "tg_offset": 160478485,
@@ -3973,7 +4021,6 @@
   "2105268422821204397": 40,
   "2105254077353562169": 23,
   "2105225013855175005": 69,
-  "2105214309127327920": 42,
   "2105335397433966964": 85,
   "2105304170517655684": 140,
   "2105594424663347494": 33,
@@ -4028,8 +4075,9 @@
   "2122398755198824575": 25,
   "2122692993463501155": 69,
   "2122728997402640846": 60,
-  "2122751903973154919": 406,
-  "2123019089434349704": 26
+  "2122751903973154919": 409,
+  "2123019089434349704": 26,
+  "2123105459272118388": 3
  },
- "last_fetch": "2026-11-18T16:52:33.031001+00:00"
+ "last_fetch": "2026-11-18T17:43:03.321621+00:00"
 }
