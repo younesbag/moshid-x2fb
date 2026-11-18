@@ -3776,7 +3776,7 @@
    "x_url": "https://x.com/younesbag1/status/2122692993463501155",
    "created": "2026-11-17T14:07:02+00:00",
    "text": "آسف… يمكن فعلا بدأت أغير رأيي عن Gemini.\n\nلأول مرة من شهور، Gemini 4 Carbon ممتاز جدا.\n\nوHydrogen؟ سريع بشكل غبي، ينجز الشغل وما يحرق التوكنز، ومناسب جدا على اشتراك Pro.\n\nلسا ما جربته بعمق…\n\nبس خلاص، بعطي Google فرصة.",
-   "score": 60,
+   "score": 62,
    "photos": [],
    "video": false,
    "quote": false,
@@ -3870,7 +3870,7 @@
    "x_url": "https://x.com/younesbag1/status/2122751903973154919",
    "created": "2026-11-17T18:01:07+00:00",
    "text": "كل مشروع أشتغل عليه يخلي Claude أذكى في المشروع اللي بعده.\n\nو مو لأن النموذج يتعلم فعليا\n\nبنيت له «دماغ» يحفظ قراراتي، تجاربي، أبحاثي والأخطاء اللي تعلمنا منها… ثم يقرأها قبل أي شغل جديد.\n\nيعني كل جلسة تبدأ من كل اللي تعلمناه سابقا، وأي درس جديد يرجع للدماغ بدل ما يضيع بانتهاء المحادثة.\n\nولو تبي تبني نفس النظام داخل Claude Code، هذا البرومبت:\n\nPrompt:\n\n“Build me a persistent second brain for Claude Code.\n\nThe goal is simple: every future session should benefit from decisions, experiments, research, and mistakes from previous sessions.\n\nCreate this structure:\n\n- brain/decisions\n- brain/results\n- brain/research\n- brain/lessons\n- brain/topics\n- brain/sources\n- brain/index.md\n\nRules:\n\n1. Before making any important recommendation or decision, search the brain for relevant previous decisions, results, lessons, and research.\n\n2. If previous evidence contradicts the new recommendation, explicitly surface the contradiction before proceeding.\n\n3. After any task that produces a meaningful decision, result, research finding, or reusable lesson, write it to the brain before marking the task complete.\n\n4. Never overwrite historical decisions. If a new decision replaces an old one, mark the old decision as superseded and link both directions.\n\n5. Every metric or number must include its date and source. Historical numbers are snapshots, not current truth.\n\n6. Raw sources must remain immutable.\n\n7. Avoid duplicated facts. Keep one canonical source and link to it from other files.\n\n8. Never store passwords, API keys, personal customer data, emails, phone numbers, or private identifiers.\n\n9. Maintain an index that summarizes the most important current knowledge and links to the underlying files.\n\n10. Periodically audit the brain for contradictions, stale numbers, orphaned files, and lessons that should become permanent rules.\n\nAlso update CLAUDE.md so Claude automatically:\n\n- reads the brain index at the start of every session\n- searches the brain before important decisions\n- writes new knowledge back before finishing relevant tasks\n\nUse Markdown files, human-readable links, and Git so the entire history is preserved.\n\nFinally, create the system, seed it with example templates, and test the read-before-decide / write-after-learn loop on one sample decision.\n\nDo not just explain the architecture. Build it.”",
-   "score": 383,
+   "score": 389,
    "photos": [],
    "video": false,
    "quote": false,
@@ -3918,7 +3918,7 @@
    "x_url": "https://x.com/younesbag1/status/2123019089434349704",
    "created": "2026-11-18T11:42:49+00:00",
    "text": "أتمنى لو treg دافعين لي على هالكلام… بس فعليا ما دفعوا لي شي 😂\n\nصراحة من أفضل الأدوات اللي سهلت علي شغل الـAI agents.\n\nبدل ما تربط وكيلك بـ20 خدمة وتدفع اشتراكات، تربطه مرة واحدة بـtreg، ويصير عنده وصول لآلاف الأدوات:\n\nGoogle، SEO، emails، social data، scraping، وحتى توليد صور وفيديو وصوت.\n\nوالأهم: ما فيه اشتراك. تشحن credits وتدفع على الاستخدام فقط.\n\nالأسعار رخيصة جدا. مثلا نتائج Google السعودية عندي تكلف حوالي $0.002 للبحث.\n\nوأنت ما تختار الأداة أصلا. تقول للوكيل وش تبي، وهو يبحث، يشوف السعر، وينفذ.\n\nفعليا استفدت منه كثير، فقلت أشاركه معكم.\n\nhttps://t.co/q6k1ie5d9w",
-   "score": 12,
+   "score": 18,
    "photos": [],
    "video": false,
    "quote": false,
@@ -4026,10 +4026,10 @@
   "2115744050573910145": 144,
   "2122328563428810974": 156,
   "2122398755198824575": 25,
-  "2122692993463501155": 60,
+  "2122692993463501155": 62,
   "2122728997402640846": 57,
-  "2122751903973154919": 383,
-  "2123019089434349704": 12
+  "2122751903973154919": 389,
+  "2123019089434349704": 18
  },
- "last_fetch": "2026-11-18T12:39:57.664365+00:00"
+ "last_fetch": "2026-11-18T13:30:34.640321+00:00"
 }
